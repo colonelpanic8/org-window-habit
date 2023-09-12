@@ -1,0 +1,67 @@
+* org-window-habit README
+** Overview
+org-window-habit is an Emacs package that replaces Org Mode's habit-tracking
+functionality. It allows for more complex habit assessment and rescheduling
+logic, defined in terms of one or more windows in which a specific number of
+repetitions should be completed. Instead of relying on a simple schedule (i.e.
+org repeaters), org-window-habit uses a sophisticated and very customizable
+method to evaluate habit compliance and decide on rescheduling.
+** Quick Start
+*** Sample Configuration
+org-window-habit is not yet on melpa and so must be installed from git. With
+straight.el, the following should work:
+#+begin_src emacs-lisp
+(use-package org-window-habit
+  :demand t
+  :straight
+  (org-window-habit
+   :repo "colonelpanic8/org-window-habit"
+   :host github
+   :files ("org-window-habit.el"))
+  :config
+  (progn
+    (org-window-habit-mode +1)))
+#+end_src
+
+*** Habit Tracking
+Define a org heading with a TODO state and a SCHEDULED or DEADLINE. You also
+need to add :STYLE: habit under :PROPERTIES: to signal that this is a habit
+entry. You may add a repeater, but it will essentially be ignored as
+org-window-habit's more sophisticated rescheduling will clobber the date
+assigned by the built in org repeating functionality.
+#+begin_src org
+**** TODO [#C] Weights
+SCHEDULED: <2023-09-12 Tue 16:30> DEADLINE: <2023-09-12 Tue .+2d>
+:PROPERTIES:
+:STYLE: habit
+:END:
+#+end_src
+*** Using Simple Repetitions Requirements
+If you only want to define a single window over which the habit will be
+evaluated you can use =:WINDOW_DURATION:= =:REPETITIONS_REQUIRED:= and
+=:OKAY_REPETITIONS_REQUIRED:= to set simple conditions for habit assessment.
+#+begin_src org
+:WINDOW_DURATION: 1w
+:REPETITIONS_REQUIRED: 4
+:OKAY_REPETITIONS_REQUIRED: 3
+#+end_src
+
+*** Advanced Habit Specification
+Alternatively, you can use the =:WINDOW_SPECS:= property to define multiple assessment windows for your habit.
+#+begin_src org
+:WINDOW_SPECS: ((:duration (:days 4) :repetitions 1) (:duration (:days 6) :repetitions 2))
+:ASSESMENT_INTERVAL: (:days 1)
+:RESCHEDULE_INTERVAL: 2
+#+end_src
+
+*** Assesment interval
+The =:ASSESMENT_INTERVAL:= parameter defaults to a period of 1 day when not specified.
+It  controls how much the rolling window for =:WINDOW_DURATION= is
+advanced for each evaluation of the habit. In other words, it determines the
+step size by which the rolling window moves forward in time for each habit
+assessment.
+
+*** Reschedule interval
+The =:RESCHEDULE_INTERVAL:= parameter defaults to a period of 1 day when not
+specified. It controls the minimum amount of time that must pass after a
+completion before a habit can be rescheduled.

@@ -34,6 +34,7 @@
 (require 'calendar)
 (require 'org)
 (require 'org-habit)
+(require 'org-agenda)
 (require 'cl-lib)
 
 (defgroup org-window-habit nil
