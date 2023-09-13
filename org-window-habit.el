@@ -129,13 +129,11 @@
   (org-window-habit-multiply-plist plist -1))
 
 (defun org-window-habit-multiply-plist (plist factor)
-  (let (result)
-    (while plist
-      (let ((key (pop plist))
-            (value (pop plist)))
-        (push key result)
-        (push (* factor value) result)))
-    (nreverse result)))
+  (cl-loop for v in plist
+           for index from 0
+           collect (if (eq (mod index 2) 1)
+                       (* factor v)
+                     v))))
 
 (defun org-window-habit-duration-proportion (start-time end-time between-time)
   (let* ((full-interval (float-time (time-subtract end-time start-time)))
