@@ -41,12 +41,12 @@
   "Customization options for org-window-habit."
   :group 'org-habit)
 
-(defcustom org-window-habit-conforming-color "#0000FF"
+(defcustom org-window-habit-conforming-color "#4d7085"
   "Color to indicate conformity in habit tracking."
   :group 'org-window-habit
   :type 'string)
 
-(defcustom org-window-habit-not-conforming-color "#FF0000"
+(defcustom org-window-habit-not-conforming-color "#d40d0d"
   "Color to indicate non-conformity in habit tracking."
   :group 'org-window-habit
   :type 'string)
@@ -66,7 +66,7 @@
   :group 'org-window-habit
   :type 'string)
 
-(defcustom org-window-habit-non-conforming-scale .8
+(defcustom org-window-habit-non-conforming-scale 1.0
   "Scale factor for rescaling non-conforming assessment values."
   :group 'org-window-habit
   :type 'float)
