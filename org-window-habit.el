@@ -42,7 +42,7 @@
   :group 'org-habit)
 
 (defcustom org-window-habit-property-prefix "OWH"
-  "The prefix that will be used when finding org properties for org-window-habit"
+  "The prefix that will be used when finding org properties for org-window-habit."
   :group 'org-window-habit
   :type 'string)
 
@@ -143,7 +143,7 @@
            for index from 0
            collect (if (eq (mod index 2) 1)
                        (* factor v)
-                     v))))
+                     v)))
 
 (defun org-window-habit-duration-proportion (start-time end-time between-time)
   (let* ((full-interval (float-time (time-subtract end-time start-time)))
