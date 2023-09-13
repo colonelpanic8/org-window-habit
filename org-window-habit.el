@@ -41,6 +41,11 @@
   "Customization options for org-window-habit."
   :group 'org-habit)
 
+(defcustom org-window-habit-property-prefix "OWH"
+  "The prefix that will be used when finding org properties for org-window-habit"
+  :group 'org-window-habit
+  :type 'string)
+
 (defcustom org-window-habit-conforming-color "#4d7085"
   "Color to indicate conformity in habit tracking."
   :group 'org-window-habit
@@ -111,6 +116,11 @@
 
 
 ;; Utility functions
+
+(defun org-window-habit-property (name)
+  (if org-window-habit-property-prefix
+      (format "%s_%s" org-window-habit-property-prefix name)
+    name))
 
 (defun org-window-habit-time-to-string (time)
   (format-time-string
@@ -355,13 +365,15 @@
            (done-times-vector (vconcat done-times))
            (assessment-interval
             (org-window-habit-string-duration-to-plist
-             (org-entry-get nil "ASSESSMENT_INTERVAL") :default '(:days 1)))
+             (org-entry-get
+              nil (org-window-habit-property "ASSESSMENT_INTERVAL")) :default '(:days 1)))
            (reschedule-interval
             (org-window-habit-string-duration-to-plist
-             (org-entry-get nil "RESCHEDULE_INTERVAL")))
+             (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL"))))
            (max-repetitions-per-interval
             (string-to-number
-             (or (org-entry-get nil "MAX_REPETITIONS_PER_INTERVAL" t) "1"))))
+             (or (org-entry-get
+                  nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t) "1"))))
       (make-instance 'org-window-habit
                      :start-time nil
                      :window-specs (or
@@ -373,7 +385,7 @@
                      :max-repetitions-per-interval max-repetitions-per-interval))))
 
 (defun org-window-habit-create-specs ()
-  (let ((spec-text (org-entry-get nil "WINDOW_SPECS" t)))
+  (let ((spec-text (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)))
     (when spec-text
       (cl-loop for args in (car (read-from-string spec-text))
                collect (apply 'make-instance 'org-window-habit-window-spec args)))))
@@ -382,24 +394,19 @@
   (let*
       ((window-length
         (org-window-habit-string-duration-to-plist
-         (org-entry-get nil "WINDOW_DURATION" "1d") :default '(:days 1)))
+         (org-entry-get nil (org-window-habit-property "WINDOW_DURATION")
+                        "1d") :default '(:days 1)))
        (repetitions-required
         (string-to-number
-         (or (org-entry-get nil "REPETITIONS_REQUIRED" t) "1")))
-       (okay-repetitions-required
-        (string-to-number
-         (or (org-entry-get nil "OKAY_REPETITIONS_REQUIRED" t) "1"))))
+         (or (org-entry-get nil
+                            (org-window-habit-property "REPETITIONS_REQUIRED")
+                            t) "1"))))
     (list
      (make-instance
       'org-window-habit-window-spec
       :duration window-length
       :repetitions repetitions-required
-      :value 1.0)
-     (make-instance
-      'org-window-habit-window-spec
-      :duration window-length
-      :repetitions okay-repetitions-required
-      :value .5))))
+      :value 1.0))))
 
 
 ;; Iterator
