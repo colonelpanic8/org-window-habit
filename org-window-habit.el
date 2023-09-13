@@ -704,7 +704,13 @@
               (oref (oref (car iterators) window) assessment-end-time))
              (conforming-values
               (cl-loop for iterator in iterators collect
-                       (org-window-habit-get-conforming-value iterator)))
+                       (org-window-habit-get-conforming-value
+                        iterator
+                        :fill-completions-fn
+                        (lambda (time actual-completions)
+                          (if (time-equal-p current-assessment-start time)
+                              0
+                            actual-completions)))))
              (assessment-value (funcall aggregation-fn conforming-values))
              (with-completion-conforming-values
               (cl-loop for iterator in iterators
@@ -874,9 +880,9 @@ If LINE is provided, insert graphs at beggining of line"
          (interval-is-present (eq current-interval-time-type 'present))
          (completion-expected-today
           (and interval-is-present
-                 (time-less-p
-                  (org-window-habit-get-next-required-interval habit)
-                  (oref window assessment-end-time))))
+               (time-less-p
+                (org-window-habit-get-next-required-interval habit)
+                (oref window assessment-end-time))))
          (bg-color
           (if completion-expected-today
               without-completion-color
