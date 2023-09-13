@@ -24,11 +24,11 @@ straight.el, the following should work:
 #+end_src
 
 *** Habit Tracking
-Define a org heading with a TODO state and a SCHEDULED or DEADLINE. You also
-need to add :STYLE: habit under :PROPERTIES: to signal that this is a habit
-entry. You may add a repeater, but it will essentially be ignored as
-org-window-habit's more sophisticated rescheduling will clobber the date
-assigned by the built in org repeating functionality.
+Define a org heading with a TODO state and a SCHEDULED or DEADLINE with any
+repeater. The actual length of the repeater does not matter, since a different
+mechanism will be used to assign new due dates, but it is important (for the
+time being) that some type of repeater is present. You also need to add :STYLE:
+habit under :PROPERTIES: to signal that this is a habit entry.
 #+begin_src org
 **** TODO [#C] Weights
 SCHEDULED: <2023-09-12 Tue 16:30> DEADLINE: <2023-09-12 Tue .+2d>
