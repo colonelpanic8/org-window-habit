@@ -830,14 +830,32 @@ If LINE is provided, insert graphs at beggining of line"
   (let* ((required-interval-start
           (org-window-habit-get-next-required-interval
            (org-window-habit-create-instance-from-heading-at-point)))
+         (repeat (org-get-repeat))
          (target-time-string
           (format-time-string (car org-time-stamp-formats)
                               required-interval-start)))
-    ;; TODO: Preserve repeat
     (when org-window-habit-repeat-to-deadline
-      (org-deadline nil target-time-string))
+      (org-deadline nil target-time-string)
+      (when (null repeat)
+        (org-window-habit-add-repeater ".+1d")))
     (when org-window-habit-repeat-to-scheduled
-      (org-schedule nil target-time-string))))
+      (org-schedule nil target-time-string)
+      (when (null repeat)
+        (org-window-habit-add-repeater ".+1d")))))
+
+(defun org-window-habit-add-repeater (repeater)
+  (save-excursion
+	(org-back-to-heading t)
+	(when (re-search-forward
+		   (concat org-last-inserted-timestamp)
+		   (line-end-position 2)
+		   t)
+	  (goto-char (1- (match-end 0)))
+	  (insert-and-inherit " " repeater)
+	  (setq org-last-inserted-timestamp
+		    (concat (substring org-last-inserted-timestamp 0 -1)
+			" " repeater
+			(substring org-last-inserted-timestamp -1))))))
 
 (defun org-window-habit-auto-repeat-maybe-advice (orig &rest args)
   (let ((res (apply orig args)))
