@@ -566,7 +566,7 @@
          ;; order
          (org-window-habit-find-array-forward
           done-times end-time
-          :comparison 'time-less-p
+          :comparison 'time-less-or-equal-p
           :start-index start-index)
          ;; We use start-time to compute the end index because the list is in
          ;; descending order
@@ -585,7 +585,7 @@
        ;; descending order
        (org-window-habit-find-array-backward
         done-times start-time
-        :comparison 'time-greater-or-equal-p
+        :comparison 'time-greater-p
         :start-index end-index)))))
 
 
