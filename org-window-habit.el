@@ -94,12 +94,12 @@
   :group 'org-window-habit
   :type 'function)
 
-(defcustom org-window-habit-preceding-intervals 30
+(defcustom org-window-habit-preceding-intervals 21
   "Number of days before today to appear in consistency graphs."
   :group 'org-window-habit
   :type 'integer)
 
-(defcustom org-window-habit-following-days 7
+(defcustom org-window-habit-following-days 4
   "Number of days after today to appear in consistency graphs."
   :group 'org-window-habit
   :type 'integer)
@@ -319,6 +319,11 @@
    (start-time :initarg :start-time)))
 
 (cl-defmethod initialize-instance :after ((habit org-window-habit) &rest _args)
+  (when (null (oref habit assessment-interval))
+    (error (format "Habits must have the %s propety set when org-window-habit is enabled."
+                   (org-window-habit-property "ASSESSMENT_INTERVAL"))))
+  (when (null (oref habit window-specs))
+    (error "Habits must define at least one window when org-window-habit is enabled"))
   (when (null (oref habit reschedule-interval))
     (oset habit reschedule-interval (oref habit assessment-interval)))
   (when (null (oref habit assessment-decrement-plist))
@@ -327,7 +332,7 @@
   (when (null (oref habit start-time))
     (oset habit start-time
           (org-window-habit-normalize-time-to-duration
-           (org-window-habit-earliest-completion habit)
+           (or (org-window-habit-earliest-completion habit) (current-time))
            (oref habit assessment-interval))))
   (cl-loop for window-spec in (oref habit window-specs)
            do (oset window-spec habit habit)))
@@ -621,28 +626,31 @@
       (window-specs reschedule-interval reschedule-threshold assessment-interval
                     aggregation-fn done-times)
       habit
-    (cl-loop
-     with start-time =
-     (org-window-habit-normalize-time-to-duration
-      (org-window-habit-time-max
-       now
-       (org-window-habit-keyed-duration-add-plist (aref done-times 0)
-                                                  reschedule-interval))
-      assessment-interval)
-     with iterators =
-     (cl-loop for window-spec in window-specs
-              collect
-              (org-window-habit-iterator-from-time window-spec start-time))
-     for current-assessment-start = (oref (oref (car iterators) window) assessment-start-time)
-     for conforming-values =
-     (cl-loop for iterator in iterators
-              collect (org-window-habit-get-conforming-value iterator))
-     for assessment-value = (funcall aggregation-fn conforming-values)
-     until (< assessment-value reschedule-threshold)
-     do
-     (cl-loop for iterator in iterators
-              do (org-window-habit-advance iterator))
-     finally return current-assessment-start)))
+    (if (org-window-habit-has-any-done-times habit)
+        (cl-loop
+         with start-time =
+         (org-window-habit-normalize-time-to-duration
+          (org-window-habit-time-max
+           now
+           (org-window-habit-keyed-duration-add-plist (aref done-times 0)
+                                                      reschedule-interval))
+          assessment-interval)
+         with iterators =
+         (cl-loop for window-spec in window-specs
+                  collect
+                  (org-window-habit-iterator-from-time window-spec start-time))
+         for current-assessment-start = (oref (oref (car iterators) window) assessment-start-time)
+         for conforming-values =
+         (cl-loop for iterator in iterators
+                  collect (org-window-habit-get-conforming-value iterator))
+         for assessment-value = (funcall aggregation-fn conforming-values)
+         until (< assessment-value reschedule-threshold)
+         do
+         (cl-loop for iterator in iterators
+                  do (org-window-habit-advance iterator))
+         finally return current-assessment-start)
+      (org-window-habit-normalize-time-to-duration
+       now assessment-interval))))
 
 (cl-defmethod org-window-habit-assess-interval
   ((habit org-window-habit) iterators &rest args)
@@ -683,6 +691,9 @@
 
 
 ;; Graph functions
+
+(cl-defmethod org-window-habit-has-any-done-times ((habit org-window-habit))
+  (> (length (oref habit done-times)) 0))
 
 (cl-defmethod org-window-habit-build-graph ((habit org-window-habit) &optional now)
   (setq now (or now (current-time)))
@@ -781,7 +792,9 @@ If LINE is provided, insert graphs at beggining of line"
       (while (not (eobp))
 	(let ((habit (get-text-property (point) 'org-habit-p))
           (_invisible-prop (get-text-property (point) 'invisible)))
-	  (when habit
+	  (when (and habit
+                 (or (org-window-habit-has-any-done-times habit)
+                     (progn (message "Skipping habit with no done times") nil)))
 	    (move-to-column org-habit-graph-column t)
 	    (delete-char (min (+ 1 org-habit-preceding-days
 				 org-habit-following-days)
