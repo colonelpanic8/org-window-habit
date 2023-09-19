@@ -76,8 +76,13 @@
   :group 'org-window-habit
   :type 'float)
 
-(defcustom org-window-habit-completion-needed-today-glyph ?▂
-  "Glyph character used to show days on which a completion is expected."
+(defcustom org-window-habit-completion-needed-today-glyph ?☐
+  "Glyph character used to show intervals in which a completion is expected."
+  :group 'org-window-habit
+  :type 'character)
+
+(defcustom org-window-habit-completed-glyph ?✓
+  "Glyph character used for the current interval when the habit has been completed."
   :group 'org-window-habit
   :type 'character)
 
@@ -300,6 +305,11 @@
 (defun time-greater-or-equal-p (time1 time2)
   (time-less-or-equal-p time2 time1))
 
+(defun org-window-habit-maybe-make-list-of-lists (value)
+  (if (and (listp value) (listp (car value)))
+      value
+    (list value)))
+
 (defun org-window-habit-default-aggregation-fn (collection)
   (cl-loop for el in collection minimize (car el)))
 
@@ -349,6 +359,15 @@
    (assessment-end-time :initarg :assessment-end-time)
    (start-time :initarg :start-time)
    (end-time :initarg :end-time)))
+
+(cl-defmethod org-window-habit-time-falls-in-assessment-interval
+    ((window org-window-habit-assessment-window) time)
+  (and
+   (time-less-p
+    time
+    (oref window assessment-end-time))
+   (time-less-or-equal-p
+    (oref window assessment-start-time) time)))
 
 (cl-defmethod org-window-habit-assesment-window-string
   ((window org-window-habit-assessment-window))
@@ -763,14 +782,34 @@
             (org-window-habit-assess-interval-with-and-without-completions
              habit iterators (lambda (_x) max-repetitions-per-interval))
           (nconc past-assessments
-                 (list (funcall
-                        graph-assessment-fn
-                        no-completions-assessment
-                        with-completions-assessment
-                        completion-in-interval-count
-                        'present
-                        habit
-                        (oref (car iterators) window))))))))))
+                 ;; This is a hack to allow multi character stuff for the current day
+                 (org-window-habit-maybe-make-list-of-lists
+                  (funcall graph-assessment-fn no-completions-assessment
+                           with-completions-assessment
+                           completion-in-interval-count 'present habit
+                           (oref (car iterators) window)))
+                 (cl-loop
+                  for i from 1 to org-window-habit-following-days
+                  do
+                  (cl-loop for iterator in iterators
+                           do (org-window-habit-advance iterator))
+                  for
+                  (_current-assessment-start
+                   _current-assessment-end
+                   no-completions-assessment
+                   with-completions-assessment
+                   completion-in-interval-count) =
+                   (org-window-habit-assess-interval-with-and-without-completions
+                    habit iterators (lambda (_x) 0))
+                   collect
+                   (funcall
+                    graph-assessment-fn
+                    no-completions-assessment
+                    with-completions-assessment
+                    completion-in-interval-count
+                    'future
+                    habit
+                    (oref (car iterators) window))))))))))
 
 (defun org-window-habit-make-graph-string (graph-info)
   (let ((graph (make-string (length graph-info) ?\s)))
@@ -935,30 +974,61 @@ If LINE is provided, insert graphs at beggining of line"
          (completion-today-matters
           (< without-completion-assessment-value with-completion-assessment-value))
          (interval-is-present (eq current-interval-time-type 'present))
+         (next-required-interval (org-window-habit-get-next-required-interval habit))
          (completion-expected-today
-          (and interval-is-present
-               (time-less-p
-                (org-window-habit-get-next-required-interval habit)
-                (oref window assessment-end-time))))
-         (bg-color
-          (if completion-expected-today
-              without-completion-color
-              with-completion-color))
-         (fg-color
-          (cond
-           (completion-expected-today
-            with-completion-color)
-           (completion-today-matters
-            org-window-habit-required-completion-foreground-color)
-           (t org-window-habit-non-required-completion-foreground-color)))
-         (face (org-window-habit-create-face bg-color fg-color))
-         (character
-          (cond
-           ((> completions-in-interval 0) org-habit-completed-glyph)
-           (completion-expected-today
-            org-window-habit-completion-needed-today-glyph)
-           (t ?\s))))
-    (list character face)))
+          (org-window-habit-time-falls-in-assessment-interval
+           window
+           next-required-interval))
+         (interval-has-completion (> completions-in-interval 0)))
+    (pcase current-interval-time-type
+      ('present
+       (let* ((character
+               (cond
+                (interval-has-completion org-window-habit-completed-glyph)
+                (completion-expected-today
+                 org-window-habit-completion-needed-today-glyph)
+                (t ?-)))
+              (completion-face
+               (org-window-habit-create-face with-completion-color "#000000"))
+              (sample-face
+               (if interval-has-completion
+                   completion-face
+                 (org-window-habit-create-face without-completion-color "#000000"))))
+         (list
+          (list ?| completion-face)
+          (list character completion-face)
+          (list ?\s sample-face)
+          (list ?| completion-face))))
+      ('past
+       (let* ((bg-color
+               (if completion-expected-today
+                   without-completion-color
+                 with-completion-color))
+              (fg-color
+               (cond
+                (completion-expected-today
+                 with-completion-color)
+                (completion-today-matters
+                 org-window-habit-required-completion-foreground-color)
+                (t org-window-habit-non-required-completion-foreground-color)))
+              (face (org-window-habit-create-face bg-color fg-color))
+              (character
+               (cond
+                ((> completions-in-interval 0) org-habit-completed-glyph)
+                (t ?\s))))
+         (list character face)))
+      ('future
+       (let* ((bg-color
+               without-completion-color)
+              (fg-color
+               "#000000")
+              (face (org-window-habit-create-face bg-color fg-color))
+              (character
+               (cond
+                (completion-expected-today
+                 org-window-habit-completion-needed-today-glyph)
+                (t ?\s))))
+         (list character face))))))
 
 (provide 'org-window-habit)
 ;;; org-window-habit.el ends here
