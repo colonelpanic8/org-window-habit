@@ -1,12 +1,12 @@
-;;; org-window-habit.el --- Time window based habits. -*- lexical-binding: t; -*-
+;;; org-window-habit.el --- Time window based habits -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2023 Ivan Malison
 
 ;; Author: Ivan Malison <IvanMalison@gmail.com>
-;; Keywords: org-mode habit interval window
+;; Keywords: calendar org-mode habit interval window
 ;; URL: https://github.com/colonelpanic8/org-window-habit
 ;; Version: 0.1.0
-;; Package-Requires: ((dash "2.10.0") (emacs "28"))
+;; Package-Requires: ((emacs "28.1") (org "9.0.0") (dash "2.10.0"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -38,11 +38,11 @@
 (require 'cl-lib)
 
 (defgroup org-window-habit nil
-  "Customization options for org-window-habit."
+  "Customization options for `org-window-habit'."
   :group 'org-habit)
 
 (defcustom org-window-habit-property-prefix "OWH"
-  "The prefix that will be used when finding org properties for org-window-habit."
+  "The prefix that will be used when finding org properties for `org-window-habit'."
   :group 'org-window-habit
   :type 'string)
 
@@ -295,15 +295,15 @@
    (* space)
    (regexp org-ts-regexp-inactive)))
 
-(defun time-less-or-equal-p (time1 time2)
+(defun org-window-habit-time-less-or-equal-p (time1 time2)
   (or (time-less-p time1 time2)
       (time-equal-p time1 time2)))
 
-(defun time-greater-p (time1 time2)
+(defun org-window-habit-time-greater-p (time1 time2)
   (time-less-p time2 time1))
 
-(defun time-greater-or-equal-p (time1 time2)
-  (time-less-or-equal-p time2 time1))
+(defun org-window-habit-time-greater-or-equal-p (time1 time2)
+  (org-window-habit-time-less-or-equal-p time2 time1))
 
 (defun org-window-habit-maybe-make-list-of-lists (value)
   (if (and (listp value) (listp (car value)))
@@ -366,7 +366,7 @@
    (time-less-p
     time
     (oref window assessment-end-time))
-   (time-less-or-equal-p
+   (org-window-habit-time-less-or-equal-p
     (oref window assessment-start-time) time)))
 
 (cl-defmethod org-window-habit-assesment-window-string
@@ -380,7 +380,7 @@
      (format "end-time: %s" (org-window-habit-time-to-string end-time)))))
 
 (defun org-window-habit-create-instance-from-heading-at-point ()
-  "Construct an org-window-habit instance from the current org entry."
+  "Construct an `org-window-habit' instance from the current org entry."
   (save-excursion
     (let* ((done-times
             (cl-loop for state-change-info in (org-window-habit-parse-logbook)
@@ -585,26 +585,26 @@
          ;; order
          (org-window-habit-find-array-forward
           done-times end-time
-          :comparison 'time-less-or-equal-p
+          :comparison 'org-window-habit-time-less-or-equal-p
           :start-index start-index)
          ;; We use start-time to compute the end index because the list is in
          ;; descending order
          (org-window-habit-find-array-forward
           done-times start-time
-          :comparison 'time-less-or-equal-p
+          :comparison 'org-window-habit-time-less-or-equal-p
           :start-index end-index))
       (list
        ;; We use end-time and not start time because the array is in descending
        ;; order
        (org-window-habit-find-array-backward
         done-times end-time
-        :comparison 'time-greater-p
+        :comparison 'org-window-habit-time-greater-p
         :start-index start-index)
        ;; We use start-time to compute the end index because the list is in
        ;; descending order
        (org-window-habit-find-array-backward
         done-times start-time
-        :comparison 'time-greater-p
+        :comparison 'org-window-habit-time-greater-p
         :start-index end-index)))))
 
 
