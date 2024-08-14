@@ -91,7 +91,19 @@
   :lighter nil
   :global t
   :group 'org-window-habit
-  :require 'org-window-habit)
+  :require 'org-window-habit
+  (if org-window-habit-mode
+      (progn
+        (advice-add #'org-habit-parse-todo
+                    :around #'org-window-habit-parse-todo-advice)
+        (advice-add #'org-habit-get-urgency
+                    :around #'org-window-habit-get-urgency-advice)
+        (advice-add #'org-auto-repeat-maybe
+                    :around 'org-window-habit-auto-repeat-maybe-advice)
+        (advice-add #'org-add-log-note
+                    :around 'org-window-habit-auto-repeat-maybe-advice)
+        (advice-add #'org-habit-insert-consistency-graphs
+                    :around 'org-window-habit-insert-consistency-graphs-advice))))
 
 (defcustom org-window-habit-graph-assessment-fn
   'org-window-habit-default-graph-assessment-fn
@@ -129,7 +141,7 @@
 
 (defun org-window-habit-time-to-string (time)
   (format-time-string
-   "%Y-%m-%d %H:%M"
+   "%F %R"
    time))
 
 (defun org-window-habit-time-max (&rest args)
@@ -186,7 +198,7 @@
                  result-year)))
 
 (defun org-window-habit-keyed-duration-add-plist (base-time plist)
-  (apply 'org-window-habit-keyed-duration-add :base-time base-time plist))
+  (apply '#org-window-habit-keyed-duration-add :base-time base-time plist))
 
 (cl-defun org-window-habit-string-duration-to-plist
     (string-value &key (default nil))
@@ -330,8 +342,8 @@
 
 (cl-defmethod initialize-instance :after ((habit org-window-habit) &rest _args)
   (when (null (oref habit assessment-interval))
-    (error (format "Habits must have the %s propety set when org-window-habit is enabled."
-                   (org-window-habit-property "ASSESSMENT_INTERVAL"))))
+    (error "Habits must have the %s property set when org-window-habit is enabled"
+           (org-window-habit-property "ASSESSMENT_INTERVAL")))
   (when (null (oref habit window-specs))
     (error "Habits must define at least one window when org-window-habit is enabled"))
   (when (null (oref habit reschedule-interval))
@@ -412,7 +424,7 @@
   (let ((spec-text (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)))
     (when spec-text
       (cl-loop for args in (car (read-from-string spec-text))
-               collect (apply 'make-instance 'org-window-habit-window-spec args)))))
+               collect (apply #'make-instance 'org-window-habit-window-spec args)))))
 
 (defun org-window-habit-create-specs-from-perfect-okay ()
   (let*
@@ -488,7 +500,7 @@
     (min
      1.0
      (/
-      (apply 'org-window-habit-get-completion-count
+      (apply #'org-window-habit-get-completion-count
              (oref window-spec habit)
              (oref window start-time)
              (oref window end-time)
@@ -507,7 +519,7 @@
 (cl-defmethod org-window-habit-get-conforming-value
   ((iterator org-window-habit-iterator) &rest args)
   (with-slots (window-spec window) iterator
-    (list (apply 'org-window-habit-conforming-ratio iterator args)
+    (list (apply #'org-window-habit-conforming-ratio iterator args)
           (or (oref window-spec conforming-value)
               (oref window-spec duration-plist))
           window)))
@@ -675,7 +687,7 @@
   ((habit org-window-habit) iterators &rest args)
   (let* ((conforming-values
           (cl-loop for iterator in iterators
-                   collect (apply 'org-window-habit-get-conforming-value iterator args))))
+                   collect (apply #'org-window-habit-get-conforming-value iterator args))))
     (or (funcall (oref habit aggregation-fn) conforming-values) 0.0)))
 
 (cl-defmethod org-window-habit-assess-interval-with-and-without-completions
@@ -857,24 +869,17 @@ If LINE is provided, insert graphs at beggining of line"
       (org-window-habit-create-instance-from-heading-at-point)
     (apply orig args)))
 
-(advice-add 'org-habit-parse-todo
-            :around 'org-window-habit-parse-todo-advice)
+
 
 (defun org-window-habit-insert-consistency-graphs-advice (orig &rest args)
   (if org-window-habit-mode
       (org-window-habit-insert-consistency-graphs)
     (apply orig args)))
 
-(advice-add 'org-habit-insert-consistency-graphs
-            :around 'org-window-habit-insert-consistency-graphs-advice)
-
 (defun org-window-habit-get-urgency-advice (orig &rest args)
   (if org-window-habit-mode
       org-default-priority              ;TODO fix this
     (apply orig args)))
-
-(advice-add 'org-habit-get-urgency
-            :around 'org-window-habit-get-urgency-advice)
 
 (defun org-window-habit-auto-repeat (&rest _args)
   "Reassign the date of the habit to the next day at which it is required."
@@ -912,15 +917,8 @@ If LINE is provided, insert graphs at beggining of line"
 (defun org-window-habit-auto-repeat-maybe-advice (orig &rest args)
   (let ((res (apply orig args)))
     (when (and org-window-habit-mode (org-is-habit-p))
-      (apply 'org-window-habit-auto-repeat args))
+      (apply #'org-window-habit-auto-repeat args))
     res))
-
-(advice-add 'org-auto-repeat-maybe
-            :around 'org-window-habit-auto-repeat-maybe-advice)
-
-;; This seems to be the actually important annotation
-(advice-add 'org-add-log-note
-            :around 'org-window-habit-auto-repeat-maybe-advice)
 
 
 ;; Default graph display functions
