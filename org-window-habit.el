@@ -198,7 +198,7 @@
                  result-year)))
 
 (defun org-window-habit-keyed-duration-add-plist (base-time plist)
-  (apply '#org-window-habit-keyed-duration-add :base-time base-time plist))
+  (apply #'org-window-habit-keyed-duration-add :base-time base-time plist))
 
 (cl-defun org-window-habit-string-duration-to-plist
     (string-value &key (default nil))
