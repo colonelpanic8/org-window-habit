@@ -99,11 +99,16 @@
         (advice-add #'org-habit-get-urgency
                     :around #'org-window-habit-get-urgency-advice)
         (advice-add #'org-auto-repeat-maybe
-                    :around 'org-window-habit-auto-repeat-maybe-advice)
+                    :around #'org-window-habit-auto-repeat-maybe-advice)
         (advice-add #'org-add-log-note
-                    :around 'org-window-habit-auto-repeat-maybe-advice)
+                    :around #'org-window-habit-auto-repeat-maybe-advice)
         (advice-add #'org-habit-insert-consistency-graphs
-                    :around 'org-window-habit-insert-consistency-graphs-advice))))
+                    :around #'org-window-habit-insert-consistency-graphs-advice))
+    (advice-remove #'org-habit-parse-todo #'org-window-habit-parse-todo-advice)
+    (advice-remove #'org-habit-get-urgency #'org-window-habit-get-urgency-advice)
+    (advice-remove #'org-auto-repeat-maybe #'org-window-habit-auto-repeat-maybe-advice)
+    (advice-remove #'org-add-log-note #'org-window-habit-auto-repeat-maybe-advice)
+    (advice-remove #'org-habit-insert-consistency-graphs #'org-window-habit-insert-consistency-graphs-advice)))
 
 (defcustom org-window-habit-graph-assessment-fn
   'org-window-habit-default-graph-assessment-fn
