@@ -347,6 +347,13 @@
    (graph-assessment-fn :initarg :graph-assessment-fn :initform nil)
    (start-time :initarg :start-time)))
 
+(defclass org-window-habit-window-spec ()
+  ((duration-plist :initarg :duration :initform '(:days 1))
+   (target-repetitions :initarg :repetitions :initform 1)
+   (conforming-value :initarg :value :initform nil)
+   (find-window :initarg :find-window :initform nil)
+   (habit :initarg :habit)))
+
 (cl-defmethod initialize-instance :after ((habit org-window-habit) &rest _args)
   (when (null (oref habit assessment-interval))
     (error "Habits must have the %s property set when org-window-habit is enabled"
@@ -365,13 +372,6 @@
            (oref habit assessment-interval))))
   (cl-loop for window-spec in (oref habit window-specs)
            do (oset window-spec habit habit)))
-
-(defclass org-window-habit-window-spec ()
-  ((duration-plist :initarg :duration :initform '(:days 1))
-   (target-repetitions :initarg :repetitions :initform 1)
-   (conforming-value :initarg :value :initform nil)
-   (find-window :initarg :find-window :initform nil)
-   (habit :initarg :habit)))
 
 (defclass org-window-habit-assessment-window ()
   ((assessment-start-time :initarg :assessment-start-time)
