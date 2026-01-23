@@ -146,6 +146,16 @@
       (format "%s_%s" org-window-habit-property-prefix name)
     name))
 
+(defun org-window-habit-entry-p ()
+  "Return non-nil if entry at point is an org-window-habit.
+An entry is considered a window habit if it has either:
+- The WINDOW_SPECS property (new format), or
+- The WINDOW_DURATION property (simple format)
+Property names respect `org-window-habit-property-prefix'."
+  (and (org-entry-get nil "TODO")
+       (or (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)
+           (org-entry-get nil (org-window-habit-property "WINDOW_DURATION") t))))
+
 (defun org-window-habit-time-to-string (time)
   (format-time-string
    "%F %R"

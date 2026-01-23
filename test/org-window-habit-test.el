@@ -241,6 +241,94 @@
   (let ((org-window-habit-property-prefix nil))
     (should (equal (org-window-habit-property "WINDOW_SPECS") "WINDOW_SPECS"))))
 
+;;; org-window-habit-entry-p Predicate Tests
+
+(ert-deftest owh-test-habit-p-with-window-specs ()
+  "Test org-window-habit-entry-p returns non-nil for entry with WINDOW_SPECS."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_SPECS: ((:duration (:days 7) :repetitions 3))\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should (org-window-habit-entry-p)))))
+
+(ert-deftest owh-test-habit-p-with-window-duration ()
+  "Test org-window-habit-entry-p returns non-nil for entry with WINDOW_DURATION."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should (org-window-habit-entry-p)))))
+
+(ert-deftest owh-test-habit-p-without-properties ()
+  "Test org-window-habit-entry-p returns nil for entry without window properties."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Regular todo\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":CATEGORY: test\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should-not (org-window-habit-entry-p)))))
+
+(ert-deftest owh-test-habit-p-without-todo-state ()
+  "Test org-window-habit-entry-p returns nil for entry without TODO state."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Just a heading\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_SPECS: ((:duration (:days 7) :repetitions 3))\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should-not (org-window-habit-entry-p)))))
+
+(ert-deftest owh-test-habit-p-with-prefix ()
+  "Test org-window-habit-entry-p respects property prefix."
+  (let ((org-window-habit-property-prefix "OWH"))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":OWH_WINDOW_SPECS: ((:duration (:days 7) :repetitions 3))\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should (org-window-habit-entry-p)))))
+
+(ert-deftest owh-test-habit-p-with-prefix-wrong-property ()
+  "Test org-window-habit-entry-p returns nil when property has wrong prefix."
+  (let ((org-window-habit-property-prefix "OWH"))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      ;; Using non-prefixed property when prefix is expected
+      (insert ":WINDOW_SPECS: ((:duration (:days 7) :repetitions 3))\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should-not (org-window-habit-entry-p)))))
+
+(ert-deftest owh-test-habit-p-with-both-properties ()
+  "Test org-window-habit-entry-p returns non-nil when both properties exist."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_SPECS: ((:duration (:days 7) :repetitions 3))\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should (org-window-habit-entry-p)))))
+
 ;;; EIEIO Class Tests
 
 (ert-deftest owh-test-window-spec-creation ()
