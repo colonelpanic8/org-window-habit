@@ -102,14 +102,14 @@
         (advice-add #'org-auto-repeat-maybe
                     :around #'org-window-habit-auto-repeat-maybe-advice)
         (advice-add #'org-add-log-note
-                    :around #'org-window-habit-auto-repeat-maybe-advice)
+                    :around #'org-window-habit-add-log-note-advice)
         (advice-add #'org-habit-insert-consistency-graphs
                     :around #'org-window-habit-insert-consistency-graphs-advice))
     (advice-remove #'org-habit-parse-todo #'org-window-habit-parse-todo-advice)
     (when (fboundp 'org-habit-get-urgency)
       (advice-remove #'org-habit-get-urgency #'org-window-habit-get-urgency-advice))
     (advice-remove #'org-auto-repeat-maybe #'org-window-habit-auto-repeat-maybe-advice)
-    (advice-remove #'org-add-log-note #'org-window-habit-auto-repeat-maybe-advice)
+    (advice-remove #'org-add-log-note #'org-window-habit-add-log-note-advice)
     (advice-remove #'org-habit-insert-consistency-graphs #'org-window-habit-insert-consistency-graphs-advice)))
 
 (defcustom org-window-habit-graph-assessment-fn
@@ -301,6 +301,102 @@ Property names respect `org-window-habit-property-prefix'."
 (defun org-window-habit-logbook-drawer-bounds ()
   (when (re-search-forward org-logbook-drawer-re nil t)
     (list (match-beginning 0) (match-end 0))))
+
+(defun org-window-habit-fix-logbook-order ()
+  "Fix logbook entry order if the first entry is out of chronological order.
+Org-mode inserts new log entries at the top of the LOGBOOK drawer, but when
+completing a habit at an earlier date (e.g., via `org-todo-at-date'), this
+results in entries being out of order.  This function checks if the first
+entry has an older timestamp than the second entry, and if so, moves it to
+the correct sorted position.
+
+This is efficient because:
+- Most of the time entries are in order, so we just return (O(1) check)
+- When out of order, we use binary search to find position (O(log n))
+- We only move the one misplaced entry"
+  (save-excursion
+    (org-back-to-heading t)
+    (let ((bounds (org-window-habit-logbook-drawer-bounds)))
+      (when bounds
+        (cl-destructuring-bind (drawer-start drawer-end) bounds
+          (goto-char drawer-start)
+          (forward-line 1)
+          (let* ((content-start (point))
+                 (end-marker (save-excursion
+                               (goto-char drawer-end)
+                               (line-beginning-position)))
+                 (entries (org-window-habit--collect-logbook-entries
+                           content-start end-marker)))
+            ;; Only proceed if we have at least 2 entries
+            (when (>= (length entries) 2)
+              (let* ((first-entry (nth 0 entries))
+                     (second-entry (nth 1 entries))
+                     (first-time (plist-get first-entry :time))
+                     (second-time (plist-get second-entry :time)))
+                ;; Check if first entry is older than second (out of order)
+                (when (time-less-p first-time second-time)
+                  (org-window-habit--move-entry-to-sorted-position
+                   first-entry (cdr entries) end-marker))))))))))
+
+(defun org-window-habit--collect-logbook-entries (start end)
+  "Collect logbook entries between START and END.
+Returns a list of plists with :start, :end, :time, and :text properties."
+  (save-excursion
+    (goto-char start)
+    (let ((re (org-window-habit-get-logbook-entry-re))
+          entries)
+      (while (and (< (point) end)
+                  (re-search-forward re end t))
+        (let* ((entry-start (match-beginning 0))
+               (entry-end (line-beginning-position 2))  ; Start of next line
+               (timestamp-str (match-string-no-properties 3))
+               (entry-time (org-time-string-to-time timestamp-str))
+               (entry-text (buffer-substring entry-start entry-end)))
+          (push (list :start entry-start
+                      :end entry-end
+                      :time entry-time
+                      :text entry-text)
+                entries)))
+      (nreverse entries))))
+
+(defun org-window-habit--move-entry-to-sorted-position (entry other-entries end-marker)
+  "Move ENTRY to its correct sorted position among OTHER-ENTRIES.
+Uses binary search to find the insertion point efficiently."
+  (let* ((entry-time (plist-get entry :time))
+         (entry-text (plist-get entry :text))
+         (entry-start (plist-get entry :start))
+         (entry-end (plist-get entry :end))
+         ;; Find insertion point using binary search
+         (insert-idx (org-window-habit--binary-search-insert-position
+                      other-entries entry-time))
+         (insert-pos (if (>= insert-idx (length other-entries))
+                         end-marker
+                       (plist-get (nth insert-idx other-entries) :start))))
+    ;; Delete the misplaced entry first
+    (delete-region entry-start entry-end)
+    ;; Adjust insert position if it was after the deleted region
+    (when (> insert-pos entry-start)
+      (setq insert-pos (- insert-pos (- entry-end entry-start))))
+    ;; Insert at the correct position
+    (goto-char insert-pos)
+    (insert entry-text)))
+
+(defun org-window-habit--binary-search-insert-position (entries time)
+  "Find index in ENTRIES where an entry with TIME should be inserted.
+ENTRIES is a list of entry plists in buffer order (descending time order).
+Returns the index where TIME fits to maintain descending order."
+  (let ((lo 0)
+        (hi (length entries)))
+    (while (< lo hi)
+      (let* ((mid (/ (+ lo hi) 2))
+             (entry (nth mid entries))
+             (entry-time (plist-get entry :time)))
+        (if (time-less-p time entry-time)
+            ;; TIME is older than this entry, search in second half
+            (setq lo (1+ mid))
+          ;; TIME is newer or equal, search in first half
+          (setq hi mid))))
+    lo))
 
 (defun org-window-habit-parse-logbook ()
   (let ((bounds (org-window-habit-logbook-drawer-bounds)))
@@ -935,6 +1031,21 @@ If LINE is provided, insert graphs at beggining of line"
   (let ((res (apply orig args)))
     (when (and org-window-habit-mode (org-is-habit-p))
       (apply #'org-window-habit-auto-repeat args))
+    res))
+
+(defun org-window-habit-add-log-note-advice (orig &rest args)
+  "Advice for `org-add-log-note' that handles org-window-habit entries.
+After the log note is added, this:
+1. Fixes logbook order if entries are out of chronological order
+2. Triggers the habit rescheduling logic"
+  (let ((res (apply orig args)))
+    (when org-window-habit-mode
+      ;; Fix logbook order for org-window-habits
+      (when (org-window-habit-entry-p)
+        (org-window-habit-fix-logbook-order))
+      ;; Trigger auto-repeat for all habits
+      (when (org-is-habit-p)
+        (apply #'org-window-habit-auto-repeat args)))
     res))
 
 

@@ -1186,6 +1186,156 @@ Use explicit start-time to avoid window scaling."
       (should (>= stretch-ratio 0.99)))))
 
 ;;; ---------------------------------------------------------------------------
+;;; Logbook Entry Order Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-fix-logbook-order-after-backdated-completion ()
+  "Test that logbook order is fixed after org inserts a backdated entry at top.
+When org inserts a log entry at the top (its default behavior), and that entry
+has a timestamp older than the existing first entry, our fix should move it
+to the correct sorted position."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert "DEADLINE: <2024-01-20 Sat .+1d>\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":REPETITIONS_REQUIRED: 3\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      ;; Simulate org inserting a backdated entry at the TOP (the bug)
+      ;; This Jan 12 entry is WRONGLY placed before Jan 15
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-12 Fri 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-05 Fri 10:00]\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+
+      ;; Verify the initial (wrong) state - Jan 12 is before Jan 15
+      (let ((initial-times (save-excursion
+                             (org-window-habit-parse-logbook))))
+        (should (= (length initial-times) 4))
+        ;; First entry is Jan 12 (wrong - should be Jan 15)
+        (should (time-equal-p (nth 2 (nth 0 initial-times))
+                              (owh-test-make-time 2024 1 12 10 0 0))))
+
+      ;; Now call our fix function
+      (goto-char (point-min))
+      (org-window-habit-fix-logbook-order)
+
+      ;; Parse the logbook again and verify correct order
+      (goto-char (point-min))
+      (let ((new-times (save-excursion
+                         (org-window-habit-parse-logbook))))
+        ;; Should still have 4 entries
+        (should (= (length new-times) 4))
+        ;; Verify they are now in descending chronological order
+        ;; Entry 0: Jan 15 (most recent)
+        (should (time-equal-p (nth 2 (nth 0 new-times))
+                              (owh-test-make-time 2024 1 15 10 0 0)))
+        ;; Entry 1: Jan 12 (moved to correct position)
+        (should (time-equal-p (nth 2 (nth 1 new-times))
+                              (owh-test-make-time 2024 1 12 10 0 0)))
+        ;; Entry 2: Jan 10
+        (should (time-equal-p (nth 2 (nth 2 new-times))
+                              (owh-test-make-time 2024 1 10 10 0 0)))
+        ;; Entry 3: Jan 5 (earliest)
+        (should (time-equal-p (nth 2 (nth 3 new-times))
+                              (owh-test-make-time 2024 1 5 10 0 0)))))))
+
+(ert-deftest owh-test-fix-logbook-order-already-sorted ()
+  "Test that fix does nothing when logbook is already sorted."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-05 Fri 10:00]\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+
+      (let ((before-content (buffer-string)))
+        (org-window-habit-fix-logbook-order)
+        ;; Buffer should be unchanged
+        (should (string= (buffer-string) before-content))))))
+
+(ert-deftest owh-test-fix-logbook-order-single-entry ()
+  "Test that fix handles single entry logbook."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+
+      (let ((before-content (buffer-string)))
+        (org-window-habit-fix-logbook-order)
+        ;; Buffer should be unchanged
+        (should (string= (buffer-string) before-content))))))
+
+(ert-deftest owh-test-fix-logbook-order-empty-drawer ()
+  "Test that fix handles empty logbook drawer."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+
+      (let ((before-content (buffer-string)))
+        (org-window-habit-fix-logbook-order)
+        ;; Buffer should be unchanged
+        (should (string= (buffer-string) before-content))))))
+
+(ert-deftest owh-test-fix-logbook-order-entry-should-go-to-end ()
+  "Test fixing when new entry is older than all existing entries."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      ;; Org inserted Jan 1 at top, but it should be at end
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-01 Mon 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+
+      (org-window-habit-fix-logbook-order)
+
+      (goto-char (point-min))
+      (let ((times (save-excursion (org-window-habit-parse-logbook))))
+        (should (= (length times) 3))
+        ;; Jan 15 should be first
+        (should (time-equal-p (nth 2 (nth 0 times))
+                              (owh-test-make-time 2024 1 15 10 0 0)))
+        ;; Jan 10 should be second
+        (should (time-equal-p (nth 2 (nth 1 times))
+                              (owh-test-make-time 2024 1 10 10 0 0)))
+        ;; Jan 1 should be last (moved from top)
+        (should (time-equal-p (nth 2 (nth 2 times))
+                              (owh-test-make-time 2024 1 1 10 0 0)))))))
+
+;;; ---------------------------------------------------------------------------
 ;;; Scenario: More Multi-Window Spec Edge Cases
 ;;; ---------------------------------------------------------------------------
 
