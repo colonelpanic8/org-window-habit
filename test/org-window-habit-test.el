@@ -1336,6 +1336,165 @@ to the correct sorted position."
                               (owh-test-make-time 2024 1 1 10 0 0)))))))
 
 ;;; ---------------------------------------------------------------------------
+;;; Habit Reset Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-reset-ignores-completions-before-reset-time ()
+  "Test that completions before RESET_TIME are ignored.
+When a habit has a reset time, only completions after that time should
+count toward the conforming ratio."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; Completions: 3 before reset, 2 after reset
+         (done-times (list (owh-test-make-time 2024 1 20)  ; After reset
+                           (owh-test-make-time 2024 1 18)  ; After reset
+                           (owh-test-make-time 2024 1 10)  ; Before reset
+                           (owh-test-make-time 2024 1 8)   ; Before reset
+                           (owh-test-make-time 2024 1 5))) ; Before reset
+         ;; Reset on Jan 15 - only Jan 18 and Jan 20 should count
+         (reset-time (owh-test-make-time 2024 1 15))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :reset-time reset-time
+                               :start-time nil))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 20 12 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; With reset: only 2 completions in window, effective window scaled
+    ;; Window is Jan 14-21, but effective start is Jan 15 (reset time)
+    ;; So ~6 days effective, scaled target = 5 * (6/7) ≈ 4.3
+    ;; 2 completions / 4.3 ≈ 0.47
+    (should (< ratio 0.6))
+    (should (> ratio 0.3))))
+
+(ert-deftest owh-test-reset-affects-start-time ()
+  "Test that reset time becomes the effective start time for the habit."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; Old completions that would normally set start-time
+         (done-times (list (owh-test-make-time 2024 1 20)
+                           (owh-test-make-time 2024 1 5)))
+         (reset-time (owh-test-make-time 2024 1 15))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat done-times)
+                               :reset-time reset-time
+                               :start-time nil)))
+    ;; The habit's effective start should be the reset time, not Jan 5
+    (should (time-equal-p (oref habit start-time)
+                          (owh-test-make-time 2024 1 15 0 0 0)))))
+
+(ert-deftest owh-test-reset-with-no-completions-after ()
+  "Test reset behavior when there are no completions after reset time."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; All completions before reset
+         (done-times (list (owh-test-make-time 2024 1 10)
+                           (owh-test-make-time 2024 1 8)
+                           (owh-test-make-time 2024 1 5)))
+         (reset-time (owh-test-make-time 2024 1 15))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :reset-time reset-time
+                               :start-time nil))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 20)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; No completions after reset, so ratio should be 0
+    (should (= ratio 0.0))))
+
+(ert-deftest owh-test-reset-from-property ()
+  "Test that RESET_TIME property is read and used."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_DURATION: 7d\n")
+      (insert ":REPETITIONS_REQUIRED: 3\n")
+      (insert ":RESET_TIME: [2024-01-15 Mon 00:00]\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-20 Sat 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-05 Fri 10:00]\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (let ((habit (org-window-habit-create-instance-from-heading-at-point)))
+        ;; Reset time should be Jan 15
+        (should (time-equal-p (oref habit reset-time)
+                              (owh-test-make-time 2024 1 15 0 0 0)))
+        ;; Start time should be reset time, not earliest completion
+        (should (time-equal-p (oref habit start-time)
+                              (owh-test-make-time 2024 1 15 0 0 0)))))))
+
+(ert-deftest owh-test-reset-nil-behaves-normally ()
+  "Test that habits without reset time behave as before."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; All completions within the 7-day window ending Jan 21
+         (done-times (list (owh-test-make-time 2024 1 20)
+                           (owh-test-make-time 2024 1 19)
+                           (owh-test-make-time 2024 1 17)
+                           (owh-test-make-time 2024 1 16)
+                           (owh-test-make-time 2024 1 15)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :reset-time nil  ; No reset
+                               :start-time nil))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 20 12 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; All 5 completions within window, ratio should be 1.0
+    (should (>= ratio 0.99))))
+
+(ert-deftest owh-test-completion-count-respects-reset-time ()
+  "Test that get-completion-count ignores completions before reset time."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; 3 completions before reset, 2 after
+         (done-times (list (owh-test-make-time 2024 1 20)
+                           (owh-test-make-time 2024 1 18)
+                           (owh-test-make-time 2024 1 10)
+                           (owh-test-make-time 2024 1 8)
+                           (owh-test-make-time 2024 1 5)))
+         (reset-time (owh-test-make-time 2024 1 15))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :reset-time reset-time
+                               :start-time nil))
+         ;; Count completions in Jan 1-21 window
+         (count (org-window-habit-get-completion-count
+                 habit
+                 (owh-test-make-time 2024 1 1)
+                 (owh-test-make-time 2024 1 21))))
+    ;; Should only count 2 (the ones after reset)
+    (should (= count 2))))
+
+;;; ---------------------------------------------------------------------------
 ;;; Scenario: More Multi-Window Spec Edge Cases
 ;;; ---------------------------------------------------------------------------
 

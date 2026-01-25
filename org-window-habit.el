@@ -451,6 +451,7 @@ Returns the index where TIME fits to maintain descending order."
    (max-repetitions-per-interval :initarg :max-repetitions-per-interval :initform 1)
    (aggregation-fn :initarg :aggregation-fn :initform 'org-window-habit-default-aggregation-fn)
    (graph-assessment-fn :initarg :graph-assessment-fn :initform nil)
+   (reset-time :initarg :reset-time :initform nil)
    (start-time :initarg :start-time)))
 
 (defclass org-window-habit-window-spec ()
@@ -474,7 +475,9 @@ Returns the index where TIME fits to maintain descending order."
   (when (null (oref habit start-time))
     (oset habit start-time
           (org-window-habit-normalize-time-to-duration
-           (or (org-window-habit-earliest-completion habit) (current-time))
+           (or (oref habit reset-time)
+               (org-window-habit-earliest-completion-after-reset habit)
+               (current-time))
            (oref habit assessment-interval))))
   (cl-loop for window-spec in (oref habit window-specs)
            do (oset window-spec habit habit)))
@@ -522,9 +525,15 @@ Returns the index where TIME fits to maintain descending order."
            (max-repetitions-per-interval
             (string-to-number
              (or (org-entry-get
-                  nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t) "1"))))
+                  nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t) "1")))
+           (reset-time-str
+            (org-entry-get nil (org-window-habit-property "RESET_TIME")))
+           (reset-time
+            (when reset-time-str
+              (org-time-string-to-time reset-time-str))))
       (make-instance 'org-window-habit
                      :start-time nil
+                     :reset-time reset-time
                      :window-specs (or
                                     (org-window-habit-create-specs)
                                     (org-window-habit-create-specs-from-perfect-okay))
@@ -677,6 +686,22 @@ Returns the index where TIME fits to maintain descending order."
       (when (> done-times-count 0)
         (aref done-times (- done-times-count 1))))))
 
+(cl-defmethod org-window-habit-earliest-completion-after-reset ((habit org-window-habit))
+  "Return the earliest completion time that is after the reset time.
+If there is no reset time, return the earliest completion.
+If there are no completions after reset, return nil."
+  (with-slots (done-times reset-time) habit
+    (if (null reset-time)
+        (org-window-habit-earliest-completion habit)
+      ;; done-times is in descending order (most recent first)
+      ;; Find the last element that is >= reset-time
+      (let ((result nil))
+        (cl-loop for i from (1- (length done-times)) downto 0
+                 for time = (aref done-times i)
+                 while (org-window-habit-time-less-or-equal-p reset-time time)
+                 do (setq result time))
+        result))))
+
 (cl-defmethod org-window-habit-effective-start ((iterator org-window-habit-iterator))
   (org-window-habit-time-max (oref (oref iterator window) start-time)
                              (oref (oref (oref iterator window-spec) habit) start-time)))
@@ -738,31 +763,37 @@ Returns the index where TIME fits to maintain descending order."
 (cl-defmethod org-window-habit-get-completion-count
   ((habit org-window-habit) start-time end-time &key (start-index 0)
    (fill-completions-fn (lambda (_time actual-completions) actual-completions)))
-  (cl-loop
-   with next-start-index = start-index
-   with interval-end-time = end-time
-   for interval-start-time =
-   ;; This is just a sanity check for the case where the interval does not
-   ;; evenly divide the window. But you shouldn't do that anyway.
-   (org-window-habit-time-max
-    start-time
-    (org-window-habit-keyed-duration-add-plist
-     interval-end-time (oref habit assessment-decrement-plist)))
-   for (start-index end-index) =
-   (org-window-habit-get-completion-window-indices
-    habit interval-start-time interval-end-time
-    :start-index next-start-index
-    :end-index next-start-index)
-   for completions-within-interval =
-   (min (oref habit max-repetitions-per-interval)
-        (funcall
-         fill-completions-fn
-         interval-start-time
-         (- end-index start-index)))
-   sum completions-within-interval
-   do (setq next-start-index end-index
-            interval-end-time interval-start-time)
-   while (time-less-p start-time interval-start-time)))
+  ;; Clamp start-time to not be before reset-time (if set)
+  ;; This ensures completions before reset are not counted
+  (let ((effective-start-time
+         (if (oref habit reset-time)
+             (org-window-habit-time-max start-time (oref habit reset-time))
+           start-time)))
+    (cl-loop
+     with next-start-index = start-index
+     with interval-end-time = end-time
+     for interval-start-time =
+     ;; This is just a sanity check for the case where the interval does not
+     ;; evenly divide the window. But you shouldn't do that anyway.
+     (org-window-habit-time-max
+      effective-start-time
+      (org-window-habit-keyed-duration-add-plist
+       interval-end-time (oref habit assessment-decrement-plist)))
+     for (start-index end-index) =
+     (org-window-habit-get-completion-window-indices
+      habit interval-start-time interval-end-time
+      :start-index next-start-index
+      :end-index next-start-index)
+     for completions-within-interval =
+     (min (oref habit max-repetitions-per-interval)
+          (funcall
+           fill-completions-fn
+           interval-start-time
+           (- end-index start-index)))
+     sum completions-within-interval
+     do (setq next-start-index end-index
+              interval-end-time interval-start-time)
+     while (time-less-p effective-start-time interval-start-time))))
 
 (cl-defmethod org-window-habit-get-next-required-interval
   ((habit org-window-habit) &optional now) (setq now (or now (current-time)))
