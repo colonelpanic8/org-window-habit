@@ -13,6 +13,7 @@
 
         emacsWithPackages = pkgs.emacsPackages.emacsWithPackages (epkgs: [
           epkgs.dash
+          epkgs.package-lint
         ]);
 
         emacsBin = "${emacsWithPackages}/bin/emacs";
@@ -32,6 +33,44 @@
               --eval "(require 'dash)" \
               --eval "(setq byte-compile-error-on-warn t)" \
               -f batch-byte-compile org-window-habit.el
+            touch $out
+          '';
+
+          checkdoc = pkgs.runCommand "checkdoc" {} ''
+            ${emacsBin} --batch \
+              --eval "(require 'checkdoc)" \
+              --eval "(setq sentence-end-double-space nil)" \
+              --eval "(setq checkdoc-verb-check-experimental-flag nil)" \
+              --eval "(setq checkdoc-spellcheck-documentation-flag nil)" \
+              --eval "(with-current-buffer (find-file-noselect \"${srcDir}/org-window-habit.el\")
+                        (checkdoc-current-buffer t)
+                        (let ((warnings (get-buffer \"*Warnings*\")))
+                          (when (and warnings (> (buffer-size warnings) 0))
+                            (with-current-buffer warnings
+                              (princ (buffer-string)))
+                            (kill-emacs 1))))"
+            touch $out
+          '';
+
+          package-lint = pkgs.runCommand "package-lint" {} ''
+            ${emacsBin} --batch \
+              --eval "(require 'package)" \
+              --eval "(package-initialize)" \
+              --eval "(require 'package-lint)" \
+              --eval "(setq package-lint-main-file \"${srcDir}/org-window-habit.el\")" \
+              --eval "(let ((errors (package-lint-buffer
+                                      (find-file-noselect \"${srcDir}/org-window-habit.el\"))))
+                        (when errors
+                          (dolist (err errors)
+                            (message \"%s:%s: %s: %s\"
+                                     (nth 0 err) (nth 1 err)
+                                     (pcase (nth 2 err)
+                                       ('error \"error\")
+                                       ('warning \"warning\")
+                                       (_ \"info\"))
+                                     (nth 3 err)))
+                          (when (cl-some (lambda (e) (eq (nth 2 e) 'error)) errors)
+                            (kill-emacs 1))))"
             touch $out
           '';
 
@@ -57,7 +96,7 @@
             echo "Emacs version: $(emacs --version | head -1)"
             echo ""
             echo "Commands:"
-            echo "  nix flake check    - Run all checks (byte-compile, tests)"
+            echo "  nix flake check    - Run all checks (byte-compile, checkdoc, package-lint, tests)"
             echo "  emacs              - Start Emacs with dependencies"
           '';
         };

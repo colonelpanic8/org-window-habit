@@ -19,5 +19,11 @@ jobs:
       - name: Byte-compile with warnings as errors
         run: nix build .#checks.x86_64-linux.byte-compile -L
 
+      - name: Check documentation (checkdoc)
+        run: nix build .#checks.x86_64-linux.checkdoc -L
+
+      - name: Run package-lint
+        run: nix build .#checks.x86_64-linux.package-lint -L
+
       - name: Run ERT test suite
         run: nix build .#checks.x86_64-linux.test -L
