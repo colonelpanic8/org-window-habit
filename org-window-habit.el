@@ -186,14 +186,16 @@ Property names respect `org-window-habit-property-prefix'."
 
 (cl-defun org-window-habit-keyed-duration-add
     (&key (base-time (current-time))
-          (days 0) (months 0) (years 0)
-          (hours 0) (minutes 0) (seconds 0))
+          (days 0) (weeks 0) (months 0) (years 0)
+          (hours 0) (minutes 0) (seconds 0)
+          start)  ; ignored here, only used for normalization
+  (ignore start)
   (let* ((decoded-base (decode-time base-time))
          (base-year (nth 5 decoded-base))
          (base-month (nth 4 decoded-base))
          (base-day (nth 3 decoded-base))
          (base-absolute (calendar-absolute-from-gregorian (list base-month base-day base-year)))
-         (new-absolute (+ base-absolute days))
+         (new-absolute (+ base-absolute days (* weeks 7)))
          (gregorian-result (calendar-gregorian-from-absolute new-absolute))
          (result-year (+ (caddr gregorian-result) years))
          (result-month (+ (car gregorian-result) months)))
@@ -244,6 +246,18 @@ Property names respect `org-window-habit-property-prefix'."
         (list :hours (string-to-number (match-string 1 string-value))))
        (t (list :days read-value))))))
 
+(defun org-window-habit-day-of-week-number (day-symbol)
+  "Convert a day symbol to a number (0=Sunday, 1=Monday, ..., 6=Saturday)."
+  (pcase day-symbol
+    (:sunday 0)
+    (:monday 1)
+    (:tuesday 2)
+    (:wednesday 3)
+    (:thursday 4)
+    (:friday 5)
+    (:saturday 6)
+    (_ (error "Invalid day symbol: %s" day-symbol))))
+
 (defun org-window-habit-normalize-time-to-duration
     (time-value duration-plist)
   (let* ((alignment-decoded (decode-time time-value))
@@ -253,8 +267,13 @@ Property names respect `org-window-habit-property-prefix'."
          (hour (nth 2 alignment-decoded))
          (minute (nth 1 alignment-decoded))
          (second (nth 0 alignment-decoded))
-         (smallest-duration-type (car (last duration-plist 2)))
-         (smallest-duration-value (cadr (last duration-plist 2))))
+         (day-of-week (nth 6 alignment-decoded))
+         ;; Check for :weeks with optional :start
+         (weeks-value (plist-get duration-plist :weeks))
+         (week-start-day (or (plist-get duration-plist :start) :monday))
+         ;; For non-week durations, find smallest duration type
+         (smallest-duration-type (if weeks-value :weeks (car (last duration-plist 2))))
+         (smallest-duration-value (if weeks-value weeks-value (cadr (last duration-plist 2)))))
 
     ;; Align time based on the smallest duration type and its value
     (cond
@@ -275,6 +294,13 @@ Property names respect `org-window-habit-property-prefix'."
 
      ((eq smallest-duration-type :days)
       (let* ((aligned-day (- day (1- smallest-duration-value))))
+        (encode-time 0 0 0 aligned-day month year)))
+
+     ((eq smallest-duration-type :weeks)
+      (let* ((target-dow (org-window-habit-day-of-week-number week-start-day))
+             ;; Calculate days to subtract to reach the target day-of-week
+             (days-since-target (mod (- day-of-week target-dow) 7))
+             (aligned-day (- day days-since-target)))
         (encode-time 0 0 0 aligned-day month year)))
 
      ((eq smallest-duration-type :months)
@@ -452,7 +478,7 @@ Returns the index where TIME fits to maintain descending order."
    (aggregation-fn :initarg :aggregation-fn :initform 'org-window-habit-default-aggregation-fn)
    (graph-assessment-fn :initarg :graph-assessment-fn :initform nil)
    (reset-time :initarg :reset-time :initform nil)
-   (start-time :initarg :start-time)))
+   (start-time :initarg :start-time :initform nil)))
 
 (defclass org-window-habit-window-spec ()
   ((duration-plist :initarg :duration :initform '(:days 1))
@@ -649,13 +675,49 @@ Returns the index where TIME fits to maintain descending order."
 
 ;; Default versions of customizable functions
 
+(defun org-window-habit-duration-plist-to-seconds (plist)
+  "Convert a duration PLIST to approximate seconds.
+Only works for fixed-length durations (:days, :hours, :minutes, :seconds).
+Returns nil for variable-length durations (:months, :years, :weeks with :start)."
+  (let ((days (or (plist-get plist :days) 0))
+        (hours (or (plist-get plist :hours) 0))
+        (minutes (or (plist-get plist :minutes) 0))
+        (seconds (or (plist-get plist :seconds) 0))
+        (weeks (plist-get plist :weeks))
+        (months (plist-get plist :months))
+        (years (plist-get plist :years)))
+    ;; Return nil for variable-length or week-aligned durations
+    (if (or months years weeks)
+        nil
+      (+ (* days 86400)
+         (* hours 3600)
+         (* minutes 60)
+         seconds))))
+
+(defun org-window-habit-get-anchored-assessment-start (anchor-time current-time assessment-plist)
+  "Get assessment start time anchored to ANCHOR-TIME containing CURRENT-TIME.
+For fixed-length intervals (days, hours), calculates which assessment period
+CURRENT-TIME falls into relative to ANCHOR-TIME.
+For variable-length intervals (months, weeks), falls back to calendar alignment."
+  (let ((interval-seconds (org-window-habit-duration-plist-to-seconds assessment-plist)))
+    (if interval-seconds
+        ;; Fixed-length interval: calculate based on seconds since anchor
+        (let* ((anchor-seconds (float-time anchor-time))
+               (current-seconds (float-time current-time))
+               (elapsed (- current-seconds anchor-seconds))
+               (periods (floor (/ elapsed interval-seconds)))
+               (assessment-start-seconds (+ anchor-seconds (* periods interval-seconds))))
+          (seconds-to-time assessment-start-seconds))
+      ;; Variable-length interval: use calendar-based normalization
+      (org-window-habit-normalize-time-to-duration current-time assessment-plist))))
+
 (defun org-window-habit-get-window-where-time-in-last-assessment (spec time)
   (let* ((habit (oref spec habit))
-         (assessment-plist
-          (oref habit assessment-interval))
+         (assessment-plist (oref habit assessment-interval))
+         (habit-start (oref habit start-time))
          (assessment-start
-          (org-window-habit-normalize-time-to-duration
-           time assessment-plist))
+          (org-window-habit-get-anchored-assessment-start
+           habit-start time assessment-plist))
          (assessment-end
           (org-window-habit-keyed-duration-add-plist
            assessment-start
@@ -694,13 +756,11 @@ If there are no completions after reset, return nil."
     (if (null reset-time)
         (org-window-habit-earliest-completion habit)
       ;; done-times is in descending order (most recent first)
-      ;; Find the last element that is >= reset-time
-      (let ((result nil))
-        (cl-loop for i from (1- (length done-times)) downto 0
-                 for time = (aref done-times i)
-                 while (org-window-habit-time-less-or-equal-p reset-time time)
-                 do (setq result time))
-        result))))
+      ;; Iterate from oldest to newest, return first element >= reset-time
+      (cl-loop for i from (1- (length done-times)) downto 0
+               for time = (aref done-times i)
+               when (org-window-habit-time-less-or-equal-p reset-time time)
+               return time))))
 
 (cl-defmethod org-window-habit-effective-start ((iterator org-window-habit-iterator))
   (org-window-habit-time-max (oref (oref iterator window) start-time)

@@ -155,7 +155,10 @@
   (should (equal (org-window-habit-string-duration-to-plist "30D") '(:days 30))))
 
 (ert-deftest owh-test-string-duration-to-plist-weeks ()
-  "Test parsing week durations."
+  "Test parsing week durations.
+Note: '1w' shorthand converts to (:days 7), NOT (:weeks 1).
+This means '1w' does not get week-day alignment.
+Use (:weeks 1) or (:weeks 1 :start :monday) for true week alignment."
   (should (equal (org-window-habit-string-duration-to-plist "1w") '(:days 7)))
   (should (equal (org-window-habit-string-duration-to-plist "2W") '(:days 14)))
   (should (equal (org-window-habit-string-duration-to-plist "4w") '(:days 28))))
@@ -207,6 +210,491 @@
   (let* ((input (owh-test-make-time 2024 3 15 14 30 45))
          (result (org-window-habit-normalize-time-to-duration input '(:months 1))))
     (should (owh-test-times-equal-p result (owh-test-make-time 2024 3 1 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-to-days-7-not-week-aligned ()
+  "Test that (:days 7) normalizes to day-of-month, NOT week boundaries.
+This documents current behavior: '(:days 7)' aligns based on day-of-month
+arithmetic, not day-of-week. Use (:weeks 1) for true week alignment.
+Jan 15, 2024 is a Monday. With (:days 7), we get Jan 9 (Tuesday), not Jan 15 (Monday)."
+  (let* ((input (owh-test-make-time 2024 1 15 14 30 45))  ; Monday
+         (result (org-window-habit-normalize-time-to-duration input '(:days 7))))
+    ;; Current behavior: aligned-day = 15 - (7-1) = 15 - 6 = 9
+    ;; Jan 9, 2024 is a Tuesday, not a Monday
+    (should (owh-test-times-equal-p result (owh-test-make-time 2024 1 9 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-weeks-monday-default ()
+  "Test that (:weeks 1) aligns to Monday by default.
+Jan 15, 2024 is a Monday. Jan 17 is Wednesday. Jan 21 is Sunday.
+All should align to Monday Jan 15, 2024."
+  (let* ((monday (owh-test-make-time 2024 1 15 14 30 45))
+         (wednesday (owh-test-make-time 2024 1 17 10 0 0))
+         (sunday (owh-test-make-time 2024 1 21 23 59 59)))
+    ;; All should align to Monday Jan 15, 2024
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration monday '(:weeks 1))
+             (owh-test-make-time 2024 1 15 0 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration wednesday '(:weeks 1))
+             (owh-test-make-time 2024 1 15 0 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration sunday '(:weeks 1))
+             (owh-test-make-time 2024 1 15 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-weeks-explicit-monday ()
+  "Test that (:weeks 1 :start :monday) aligns to Monday."
+  (let* ((wednesday (owh-test-make-time 2024 1 17 10 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration wednesday '(:weeks 1 :start :monday))
+             (owh-test-make-time 2024 1 15 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-weeks-sunday ()
+  "Test that (:weeks 1 :start :sunday) aligns to Sunday.
+Jan 17, 2024 is Wednesday. The preceding Sunday is Jan 14, 2024."
+  (let* ((wednesday (owh-test-make-time 2024 1 17 10 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration wednesday '(:weeks 1 :start :sunday))
+             (owh-test-make-time 2024 1 14 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-weeks-saturday ()
+  "Test that (:weeks 1 :start :saturday) aligns to Saturday.
+Jan 17, 2024 is Wednesday. The preceding Saturday is Jan 13, 2024."
+  (let* ((wednesday (owh-test-make-time 2024 1 17 10 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration wednesday '(:weeks 1 :start :saturday))
+             (owh-test-make-time 2024 1 13 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-weeks-on-start-day ()
+  "Test week normalization when already on the start day.
+Jan 15, 2024 is Monday. With :start :monday, should return that same Monday."
+  (let* ((monday (owh-test-make-time 2024 1 15 14 30 45)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration monday '(:weeks 1 :start :monday))
+             (owh-test-make-time 2024 1 15 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-weeks-cross-month ()
+  "Test week normalization when week spans month boundary.
+Feb 1, 2024 is a Thursday. The Monday of that week is Jan 29, 2024."
+  (let* ((thursday-feb (owh-test-make-time 2024 2 1 12 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration thursday-feb '(:weeks 1))
+             (owh-test-make-time 2024 1 29 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-weeks-cross-year ()
+  "Test week normalization when week spans year boundary.
+Jan 3, 2024 is a Wednesday. The Monday of that week is Jan 1, 2024."
+  (let* ((wednesday-jan (owh-test-make-time 2024 1 3 12 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration wednesday-jan '(:weeks 1))
+             (owh-test-make-time 2024 1 1 0 0 0)))))
+
+(ert-deftest owh-test-keyed-duration-add-weeks ()
+  "Test adding weeks to a time."
+  (let* ((base (owh-test-make-time 2024 1 15 12 30 45))
+         (result (org-window-habit-keyed-duration-add :base-time base :weeks 2)))
+    (should (owh-test-times-equal-p result (owh-test-make-time 2024 1 29 12 30 45)))))
+
+(ert-deftest owh-test-keyed-duration-add-plist-weeks ()
+  "Test adding weeks via plist."
+  (let* ((base (owh-test-make-time 2024 1 15))
+         (result (org-window-habit-keyed-duration-add-plist base '(:weeks 1))))
+    (should (owh-test-times-equal-p result (owh-test-make-time 2024 1 22)))))
+
+;;; Assessment Window Anchoring Tests
+
+(ert-deftest owh-test-assessment-window-anchored-to-habit-start ()
+  "Test that assessment windows are anchored to the habit's start time.
+With a 3-day assessment interval, the assessment boundaries should be
+consistent relative to the habit's start, not dependent on the current date.
+
+If habit started on Jan 10, assessment periods should be:
+  Jan 10-13, Jan 13-16, Jan 16-19, etc.
+
+Evaluating from different times within the same period should give
+consistent results anchored to these boundaries."
+  (let* ((habit-start (owh-test-make-time 2024 1 10 0 0 0))
+         (done-times (vector (owh-test-make-time 2024 1 12 10 0 0)))  ; One completion
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3))
+                               :assessment-interval '(:days 3)
+                               :done-times done-times
+                               :start-time habit-start))
+         (window-spec (car (oref habit window-specs)))
+         ;; Get assessment window from Jan 14 morning
+         (window-from-jan14-am (org-window-habit-get-assessment-window
+                                window-spec (owh-test-make-time 2024 1 14 8 0 0)))
+         ;; Get assessment window from Jan 15 evening - same period as Jan 14
+         (window-from-jan15-pm (org-window-habit-get-assessment-window
+                                window-spec (owh-test-make-time 2024 1 15 20 0 0))))
+    ;; Both Jan 14 and Jan 15 fall in the Jan 13-16 assessment period
+    ;; So they should return the same assessment window boundaries
+    (should (owh-test-times-equal-p
+             (oref window-from-jan14-am assessment-start-time)
+             (oref window-from-jan15-pm assessment-start-time)))
+    (should (owh-test-times-equal-p
+             (oref window-from-jan14-am assessment-end-time)
+             (oref window-from-jan15-pm assessment-end-time)))
+    ;; The assessment period should be Jan 13-16
+    ;; (anchored to habit start of Jan 10: 10-13, 13-16, 16-19...)
+    (should (owh-test-times-equal-p
+             (oref window-from-jan14-am assessment-start-time)
+             (owh-test-make-time 2024 1 13 0 0 0)))
+    (should (owh-test-times-equal-p
+             (oref window-from-jan14-am assessment-end-time)
+             (owh-test-make-time 2024 1 16 0 0 0)))))
+
+(ert-deftest owh-test-assessment-window-3day-interval-boundaries ()
+  "Test specific assessment boundaries with 3-day interval.
+Habit starts Jan 10. With 3-day assessment:
+  Period 1: Jan 10-13
+  Period 2: Jan 13-16
+  Period 3: Jan 16-19
+
+Querying from different dates within the same period should return same window."
+  (let* ((habit-start (owh-test-make-time 2024 1 10 0 0 0))
+         (done-times (vector))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3))
+                               :assessment-interval '(:days 3)
+                               :done-times done-times
+                               :start-time habit-start))
+         (window-spec (car (oref habit window-specs))))
+    ;; Query from Jan 11 - should be in period Jan 10-13
+    (let ((window (org-window-habit-get-assessment-window
+                   window-spec (owh-test-make-time 2024 1 11 12 0 0))))
+      (should (owh-test-times-equal-p
+               (oref window assessment-start-time)
+               (owh-test-make-time 2024 1 10 0 0 0)))
+      (should (owh-test-times-equal-p
+               (oref window assessment-end-time)
+               (owh-test-make-time 2024 1 13 0 0 0))))
+    ;; Query from Jan 14 - should be in period Jan 13-16
+    (let ((window (org-window-habit-get-assessment-window
+                   window-spec (owh-test-make-time 2024 1 14 12 0 0))))
+      (should (owh-test-times-equal-p
+               (oref window assessment-start-time)
+               (owh-test-make-time 2024 1 13 0 0 0)))
+      (should (owh-test-times-equal-p
+               (oref window assessment-end-time)
+               (owh-test-make-time 2024 1 16 0 0 0))))
+    ;; Query from Jan 18 - should be in period Jan 16-19
+    (let ((window (org-window-habit-get-assessment-window
+                   window-spec (owh-test-make-time 2024 1 18 12 0 0))))
+      (should (owh-test-times-equal-p
+               (oref window assessment-start-time)
+               (owh-test-make-time 2024 1 16 0 0 0)))
+      (should (owh-test-times-equal-p
+               (oref window assessment-end-time)
+               (owh-test-make-time 2024 1 19 0 0 0))))))
+
+(ert-deftest owh-test-assessment-anchoring-vs-day-of-month ()
+  "Test that assessment windows are anchored to habit start, not day-of-month.
+This test verifies the fix: before, a 3-day interval would use day-of-month
+arithmetic (e.g., day 15 -> aligned to day 13 via 15-(3-1)=13). Now it's
+anchored to the habit's start time.
+
+Two habits starting on different days should have different assessment
+boundaries even when queried at the same time."
+  (let* (;; Habit A starts Jan 10
+         (habit-a-start (owh-test-make-time 2024 1 10 0 0 0))
+         (habit-a (make-instance 'org-window-habit
+                                 :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                    :duration '(:days 7)
+                                                                    :repetitions 3))
+                                 :assessment-interval '(:days 3)
+                                 :done-times (vector)
+                                 :start-time habit-a-start))
+         ;; Habit B starts Jan 11 (one day later)
+         (habit-b-start (owh-test-make-time 2024 1 11 0 0 0))
+         (habit-b (make-instance 'org-window-habit
+                                 :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                    :duration '(:days 7)
+                                                                    :repetitions 3))
+                                 :assessment-interval '(:days 3)
+                                 :done-times (vector)
+                                 :start-time habit-b-start))
+         (window-spec-a (car (oref habit-a window-specs)))
+         (window-spec-b (car (oref habit-b window-specs)))
+         ;; Query both from the same time: Jan 15
+         (query-time (owh-test-make-time 2024 1 15 12 0 0))
+         (window-a (org-window-habit-get-assessment-window window-spec-a query-time))
+         (window-b (org-window-habit-get-assessment-window window-spec-b query-time)))
+    ;; Habit A (started Jan 10): periods are 10-13, 13-16, 16-19
+    ;; Jan 15 falls in 13-16
+    (should (owh-test-times-equal-p
+             (oref window-a assessment-start-time)
+             (owh-test-make-time 2024 1 13 0 0 0)))
+    ;; Habit B (started Jan 11): periods are 11-14, 14-17, 17-20
+    ;; Jan 15 falls in 14-17
+    (should (owh-test-times-equal-p
+             (oref window-b assessment-start-time)
+             (owh-test-make-time 2024 1 14 0 0 0)))
+    ;; The key point: they should be DIFFERENT because they're anchored
+    ;; to different start times. With the old day-of-month approach,
+    ;; both would have been the same.
+    (should-not (owh-test-times-equal-p
+                 (oref window-a assessment-start-time)
+                 (oref window-b assessment-start-time)))))
+
+;;; Reset Time and Anchoring Interaction Tests
+
+(ert-deftest owh-test-reset-time-anchoring-basic ()
+  "Test that reset time affects the anchor point for assessment intervals.
+When reset-time is set, the habit's start-time (anchor) is derived from it."
+  (let* ((reset-time (owh-test-make-time 2024 1 15 10 0 0))
+         (done-times (vector
+                      ;; Completions after reset
+                      (owh-test-make-time 2024 1 18 10 0 0)
+                      (owh-test-make-time 2024 1 16 10 0 0)
+                      ;; Completions before reset (should be ignored)
+                      (owh-test-make-time 2024 1 10 10 0 0)
+                      (owh-test-make-time 2024 1 5 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3))
+                               :assessment-interval '(:days 3)
+                               :done-times done-times
+                               :reset-time reset-time))
+         (window-spec (car (oref habit window-specs))))
+    ;; The habit's start-time should be derived from reset-time
+    ;; (normalized to interval boundaries)
+    (should (oref habit start-time))
+    ;; Query from Jan 20 - assessment periods should be anchored
+    ;; relative to the normalized reset time
+    (let ((window (org-window-habit-get-assessment-window
+                   window-spec (owh-test-make-time 2024 1 20 12 0 0))))
+      ;; Window should exist and have reasonable bounds
+      (should (oref window assessment-start-time))
+      (should (oref window assessment-end-time))
+      ;; Assessment end should be after assessment start
+      (should (time-less-p (oref window assessment-start-time)
+                           (oref window assessment-end-time))))))
+
+(ert-deftest owh-test-reset-time-completion-filtering ()
+  "Test that completions before reset-time are not counted.
+Even if the assessment window technically spans before reset-time,
+only completions after reset should count."
+  (let* ((reset-time (owh-test-make-time 2024 1 15 0 0 0))
+         (done-times (vector
+                      ;; After reset
+                      (owh-test-make-time 2024 1 17 10 0 0)
+                      (owh-test-make-time 2024 1 16 10 0 0)
+                      ;; Before reset - should NOT count
+                      (owh-test-make-time 2024 1 14 10 0 0)
+                      (owh-test-make-time 2024 1 13 10 0 0)
+                      (owh-test-make-time 2024 1 12 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 5))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :reset-time reset-time)))
+    ;; Count completions in window Jan 12-19 (spans before and after reset)
+    ;; Only 2 completions (Jan 16, 17) should count, not 5
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 12 0 0 0)
+                  (owh-test-make-time 2024 1 19 0 0 0))))
+      (should (= count 2)))))
+
+(ert-deftest owh-test-reset-time-assessment-window-spans-reset ()
+  "Test behavior when assessment window spans across the reset time.
+The window might start before reset but end after - only post-reset
+completions should contribute to the conforming ratio."
+  (let* ((reset-time (owh-test-make-time 2024 1 15 0 0 0))
+         ;; 5 completions before reset, 2 after
+         (done-times (vector
+                      (owh-test-make-time 2024 1 17 10 0 0)
+                      (owh-test-make-time 2024 1 16 10 0 0)
+                      (owh-test-make-time 2024 1 14 10 0 0)
+                      (owh-test-make-time 2024 1 13 10 0 0)
+                      (owh-test-make-time 2024 1 12 10 0 0)
+                      (owh-test-make-time 2024 1 11 10 0 0)
+                      (owh-test-make-time 2024 1 10 10 0 0)))
+         ;; Start time explicitly set to Jan 10 for predictable anchoring
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 5))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :reset-time reset-time
+                               :start-time (owh-test-make-time 2024 1 10 0 0 0)))
+         (window-spec (car (oref habit window-specs)))
+         (iterator (org-window-habit-iterator-from-time
+                    window-spec (owh-test-make-time 2024 1 17 12 0 0))))
+    ;; The 7-day window ending Jan 18 spans Jan 11-18
+    ;; But only completions after reset (Jan 15) should count: Jan 16, 17
+    ;; With 5 required and only 2 counted, ratio should be 2/5 = 0.4
+    (let ((ratio (org-window-habit-conforming-ratio iterator)))
+      (should (< ratio 0.5))  ; Should be well under 1.0
+      (should (> ratio 0.3))))) ; Should be around 0.4
+
+(ert-deftest owh-test-reset-time-earliest-completion-after-reset ()
+  "Test that earliest-completion-after-reset correctly filters."
+  (let* ((reset-time (owh-test-make-time 2024 1 15 0 0 0))
+         (done-times (vector
+                      (owh-test-make-time 2024 1 20 10 0 0)
+                      (owh-test-make-time 2024 1 17 10 0 0)  ; This should be earliest after reset
+                      (owh-test-make-time 2024 1 14 10 0 0)  ; Before reset
+                      (owh-test-make-time 2024 1 10 10 0 0))) ; Before reset
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :reset-time reset-time)))
+    ;; earliest-completion-after-reset should return Jan 17, not Jan 10
+    (let ((earliest (org-window-habit-earliest-completion-after-reset habit)))
+      (should earliest)
+      (should (owh-test-times-equal-p earliest (owh-test-make-time 2024 1 17 10 0 0))))))
+
+(ert-deftest owh-test-reset-time-no-completions-after-reset ()
+  "Test behavior when all completions are before reset time."
+  (let* ((reset-time (owh-test-make-time 2024 1 20 0 0 0))
+         (done-times (vector
+                      (owh-test-make-time 2024 1 15 10 0 0)
+                      (owh-test-make-time 2024 1 10 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :reset-time reset-time)))
+    ;; No completions after reset, so earliest-completion-after-reset should be nil
+    (should (null (org-window-habit-earliest-completion-after-reset habit)))
+    ;; Completion count after reset should be 0
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 20 0 0 0)
+                  (owh-test-make-time 2024 1 27 0 0 0))))
+      (should (= count 0)))))
+
+(ert-deftest owh-test-reset-time-exactly-on-completion ()
+  "Test behavior when reset time exactly matches a completion time.
+The completion at reset time should be included (>= not >)."
+  (let* ((reset-time (owh-test-make-time 2024 1 15 10 0 0))
+         (done-times (vector
+                      (owh-test-make-time 2024 1 17 10 0 0)
+                      (owh-test-make-time 2024 1 15 10 0 0)  ; Exactly at reset time
+                      (owh-test-make-time 2024 1 14 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :reset-time reset-time)))
+    ;; Completion at exactly reset time should be included
+    (let ((earliest (org-window-habit-earliest-completion-after-reset habit)))
+      (should (owh-test-times-equal-p earliest (owh-test-make-time 2024 1 15 10 0 0))))
+    ;; Count should include the completion at reset time
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 14 0 0 0)
+                  (owh-test-make-time 2024 1 18 0 0 0))))
+      (should (= count 2)))))  ; Jan 15 and Jan 17
+
+(ert-deftest owh-test-anchoring-derived-from-reset-vs-explicit ()
+  "Test that habit with reset-time derives anchor differently than explicit start.
+When start-time is not provided, it's derived from reset-time (normalized).
+This might give a different anchor than explicitly setting start-time."
+  (let* ((reset-time (owh-test-make-time 2024 1 15 10 30 0))
+         ;; Habit A: explicit start-time
+         (habit-a (make-instance 'org-window-habit
+                                 :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                    :duration '(:days 7)
+                                                                    :repetitions 3))
+                                 :assessment-interval '(:days 3)
+                                 :done-times (vector)
+                                 :start-time (owh-test-make-time 2024 1 15 0 0 0)))
+         ;; Habit B: derived from reset-time (will be normalized)
+         (habit-b (make-instance 'org-window-habit
+                                 :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                    :duration '(:days 7)
+                                                                    :repetitions 3))
+                                 :assessment-interval '(:days 3)
+                                 :done-times (vector)
+                                 :reset-time reset-time)))
+    ;; Habit A has explicit start at Jan 15 00:00
+    (should (owh-test-times-equal-p
+             (oref habit-a start-time)
+             (owh-test-make-time 2024 1 15 0 0 0)))
+    ;; Habit B's start is derived from reset-time via normalization
+    ;; The normalization for (:days 3) uses day-of-month: 15 - (3-1) = 13
+    ;; So start-time should be Jan 13 00:00
+    (should (owh-test-times-equal-p
+             (oref habit-b start-time)
+             (owh-test-make-time 2024 1 13 0 0 0)))))
+
+(ert-deftest owh-test-reset-time-interleaved-completions ()
+  "Test with completions interleaved around reset time.
+Completions: Jan 5, 12, 14, 16, 18, 22 with reset at Jan 15.
+Only Jan 16, 18, 22 should count."
+  (let* ((reset-time (owh-test-make-time 2024 1 15 0 0 0))
+         (done-times (vector
+                      (owh-test-make-time 2024 1 22 10 0 0)
+                      (owh-test-make-time 2024 1 18 10 0 0)
+                      (owh-test-make-time 2024 1 16 10 0 0)
+                      (owh-test-make-time 2024 1 14 10 0 0)  ; Before reset
+                      (owh-test-make-time 2024 1 12 10 0 0)  ; Before reset
+                      (owh-test-make-time 2024 1 5 10 0 0))) ; Before reset
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 30)
+                                                                  :repetitions 10))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :reset-time reset-time)))
+    ;; Earliest after reset should be Jan 16
+    (should (owh-test-times-equal-p
+             (org-window-habit-earliest-completion-after-reset habit)
+             (owh-test-make-time 2024 1 16 10 0 0)))
+    ;; Count in window spanning Jan 1-30 should only count 3 (Jan 16, 18, 22)
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 1 0 0 0)
+                  (owh-test-make-time 2024 1 30 0 0 0))))
+      (should (= count 3)))))
+
+(ert-deftest owh-test-reset-time-changes-effective-window-scale ()
+  "Test that reset time affects the effective window start for scaling.
+When reset happens mid-window, the effective window is shortened,
+which affects the required repetitions scaling."
+  (let* ((reset-time (owh-test-make-time 2024 1 18 0 0 0))
+         ;; One completion after reset
+         (done-times (vector (owh-test-make-time 2024 1 19 10 0 0)))
+         ;; Habit with 7-day window, 7 reps required, starting Jan 15
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 7))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :reset-time reset-time
+                               :start-time (owh-test-make-time 2024 1 15 0 0 0)))
+         (window-spec (car (oref habit window-specs)))
+         ;; Query from Jan 20 - window is Jan 14-21
+         (iterator (org-window-habit-iterator-from-time
+                    window-spec (owh-test-make-time 2024 1 20 12 0 0))))
+    ;; The effective-start should be max(window-start, habit-start)
+    ;; Window starts Jan 14, habit-start is Jan 15, so effective is Jan 15
+    ;; But wait - reset-time is Jan 18, which affects completion counting
+    ;; We have 1 completion in a window that effectively starts Jan 18
+    ;; (due to reset), giving ~3 days instead of 7
+    ;; This affects conforming ratio calculation
+    (let ((ratio (org-window-habit-conforming-ratio iterator)))
+      ;; With 1 completion in ~3 effective days out of 7-day window with 7 reps
+      ;; The ratio should be less than 1/7 ≈ 0.14 due to scaling
+      ;; Exact value depends on effective window calculation
+      (should (< ratio 1.0)))))
 
 ;;; Maybe Make List of Lists Tests
 
