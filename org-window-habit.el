@@ -142,6 +142,9 @@
 ;; Utility functions
 
 (defun org-window-habit-property (name)
+  "Return the full property name for NAME with the configured prefix.
+If `org-window-habit-property-prefix' is \"OWH\" and NAME is \"WINDOW_DURATION\",
+returns \"OWH_WINDOW_DURATION\"."
   (if org-window-habit-property-prefix
       (format "%s_%s" org-window-habit-property-prefix name)
     name))
@@ -157,6 +160,7 @@ Property names respect `org-window-habit-property-prefix'."
            (org-entry-get nil (org-window-habit-property "WINDOW_DURATION") t))))
 
 (defun org-window-habit-time-to-string (time)
+  "Format TIME as \"YYYY-MM-DD HH:MM\" for display and debugging."
   (format-time-string
    "%F %R"
    time))
@@ -170,9 +174,13 @@ Property names respect `org-window-habit-property-prefix'."
     max-time))
 
 (defun org-window-habit-negate-plist (plist)
+  "Negate all numeric values in duration PLIST.
+Used to create a decrement plist for iterating backwards through time."
   (org-window-habit-multiply-plist plist -1))
 
 (defun org-window-habit-multiply-plist (plist factor)
+  "Multiply all numeric values in duration PLIST by FACTOR.
+For example, (:days 2 :hours 3) with FACTOR 2 becomes (:days 4 :hours 6)."
   (cl-loop for v in plist
            for index from 0
            collect (if (eq (mod index 2) 1)
@@ -180,6 +188,9 @@ Property names respect `org-window-habit-property-prefix'."
                      v)))
 
 (defun org-window-habit-duration-proportion (start-time end-time between-time)
+  "Calculate what proportion of the interval remains after BETWEEN-TIME.
+Returns (end - between) / (end - start), a value from 0.0 to 1.0.
+Used to scale targets when a habit hasn't been active for the full window."
   (let* ((full-interval (float-time (time-subtract end-time start-time)))
          (partial-interval (float-time (time-subtract end-time between-time))))
     (/ partial-interval full-interval)))
@@ -189,6 +200,9 @@ Property names respect `org-window-habit-property-prefix'."
           (days 0) (weeks 0) (months 0) (years 0)
           (hours 0) (minutes 0) (seconds 0)
           start)  ; ignored here, only used for normalization
+  "Add a duration to BASE-TIME and return the resulting time.
+Supports calendar-aware arithmetic for months and years.
+The START parameter is accepted but ignored (used only in normalization)."
   (ignore start)
   (let* ((decoded-base (decode-time base-time))
          (base-year (nth 5 decoded-base))
@@ -217,6 +231,8 @@ Property names respect `org-window-habit-property-prefix'."
                  result-year)))
 
 (defun org-window-habit-keyed-duration-add-plist (base-time plist)
+  "Add duration PLIST to BASE-TIME.
+PLIST is a property list like (:days 7) or (:months 1 :days 15)."
   (apply #'org-window-habit-keyed-duration-add :base-time base-time plist))
 
 (cl-defun org-window-habit-string-duration-to-plist
@@ -286,6 +302,10 @@ If ONLY-DAYS is nil, returns TIME unchanged."
 
 (defun org-window-habit-normalize-time-to-duration
     (time-value duration-plist)
+  "Normalize TIME-VALUE to the start of a period defined by DURATION-PLIST.
+For :days, aligns to midnight. For :hours, aligns to the hour boundary.
+For :weeks with :start, aligns to the specified day of week.
+For :months, aligns to the 1st of the month."
   (let* ((alignment-decoded (decode-time time-value))
          (year (nth 5 alignment-decoded))
          (month (nth 4 alignment-decoded))
@@ -473,46 +493,101 @@ Returns the index where TIME fits to maintain descending order."
    (regexp org-ts-regexp-inactive)))
 
 (defun org-window-habit-time-less-or-equal-p (time1 time2)
+  "Return non-nil if TIME1 is less than or equal to TIME2."
   (or (time-less-p time1 time2)
       (time-equal-p time1 time2)))
 
 (defun org-window-habit-time-greater-p (time1 time2)
+  "Return non-nil if TIME1 is strictly greater than TIME2."
   (time-less-p time2 time1))
 
 (defun org-window-habit-time-greater-or-equal-p (time1 time2)
+  "Return non-nil if TIME1 is greater than or equal to TIME2."
   (org-window-habit-time-less-or-equal-p time2 time1))
 
 (defun org-window-habit-maybe-make-list-of-lists (value)
+  "Ensure VALUE is a list of lists.
+If VALUE is already a list of lists, return it unchanged.
+Otherwise, wrap it in another list.  Used for graph building."
   (if (and (listp value) (listp (car value)))
       value
     (list value)))
 
 (defun org-window-habit-default-aggregation-fn (collection)
+  "Return the minimum conforming ratio from COLLECTION.
+COLLECTION is a list of (ratio value window) tuples.
+Used when multiple window specs must all be satisfied."
   (cl-loop for el in collection minimize (car el)))
 
 
 ;; Data types
 
 (defclass org-window-habit ()
-  ((window-specs :initarg :window-specs :initform nil)
-   (assessment-interval :initarg :assessment-interval :initform '(:days 1))
-   (reschedule-interval :initarg :reschedule-interval :initform '(:days 1))
-   (reschedule-threshold :initarg :reschedule-threshold :initform 1.0)
-   (done-times :initarg :done-times :initform nil)
-   (assessment-decrement-plist :initarg :assessment-decrement-plist :initform nil)
-   (max-repetitions-per-interval :initarg :max-repetitions-per-interval :initform 1)
-   (aggregation-fn :initarg :aggregation-fn :initform 'org-window-habit-default-aggregation-fn)
-   (graph-assessment-fn :initarg :graph-assessment-fn :initform nil)
-   (reset-time :initarg :reset-time :initform nil)
-   (only-days :initarg :only-days :initform nil)
-   (start-time :initarg :start-time :initform nil)))
+  ((window-specs
+    :initarg :window-specs :initform nil
+    :documentation "List of `org-window-habit-window-spec' objects defining evaluation windows.")
+   (assessment-interval
+    :initarg :assessment-interval :initform '(:days 1)
+    :documentation "Duration plist for how often to re-evaluate conformity (step size for rolling window).")
+   (reschedule-interval
+    :initarg :reschedule-interval :initform '(:days 1)
+    :documentation "Minimum time after completion before the habit can be rescheduled.")
+   (reschedule-threshold
+    :initarg :reschedule-threshold :initform 1.0
+    :documentation "Conforming ratio threshold for rescheduling.
+When the ratio drops below this value, the habit needs completion.
+Default 1.0 means reschedule as soon as not fully conforming.")
+   (done-times
+    :initarg :done-times :initform nil
+    :documentation "Vector of completion timestamps in descending order (most recent first).")
+   (assessment-decrement-plist
+    :initarg :assessment-decrement-plist :initform nil
+    :documentation "Negated assessment-interval, used for iterating backwards through time.")
+   (max-repetitions-per-interval
+    :initarg :max-repetitions-per-interval :initform 1
+    :documentation "Maximum completions counted per assessment interval.
+Default 1 prevents multiple same-day completions from counting extra.")
+   (aggregation-fn
+    :initarg :aggregation-fn :initform 'org-window-habit-default-aggregation-fn
+    :documentation "Function to aggregate conforming values across multiple window specs.
+Takes a list of (ratio value window) and returns the aggregate ratio.")
+   (graph-assessment-fn
+    :initarg :graph-assessment-fn :initform nil
+    :documentation "Function to determine graph character and color for each interval.
+If nil, uses `org-window-habit-graph-assessment-fn'.")
+   (reset-time
+    :initarg :reset-time :initform nil
+    :documentation "Timestamp before which completions are ignored (for fresh starts).")
+   (only-days
+    :initarg :only-days :initform nil
+    :documentation "List of day symbols restricting when the habit applies.
+Example: (:monday :wednesday :friday). Nil means all days allowed.")
+   (start-time
+    :initarg :start-time :initform nil
+    :documentation "Anchor time for assessment interval boundaries.
+Computed from earliest completion or reset-time if not specified."))
+  "A window-based habit with configurable evaluation windows and conformity tracking.")
 
 (defclass org-window-habit-window-spec ()
-  ((duration-plist :initarg :duration :initform '(:days 1))
-   (target-repetitions :initarg :repetitions :initform 1)
-   (conforming-value :initarg :value :initform nil)
-   (find-window :initarg :find-window :initform nil)
-   (habit :initarg :habit)))
+  ((duration-plist
+    :initarg :duration :initform '(:days 1)
+    :documentation "Duration plist defining how far back to look for completions.")
+   (target-repetitions
+    :initarg :repetitions :initform 1
+    :documentation "Number of completions required within the window duration.")
+   (conforming-value
+    :initarg :value :initform nil
+    :documentation "Weight of this spec when aggregating multiple windows.
+If nil, uses duration-plist for ordering.")
+   (find-window
+    :initarg :find-window :initform nil
+    :documentation "Custom function to compute assessment window for a given time.
+If nil, uses `org-window-habit-get-window-where-time-in-last-assessment'.")
+   (habit
+    :initarg :habit
+    :documentation "Back-reference to the parent `org-window-habit' object.
+Set automatically during habit initialization."))
+  "Specification for a single evaluation window within a habit.")
 
 (cl-defmethod initialize-instance :after ((habit org-window-habit) &rest _args)
   (when (null (oref habit assessment-interval))
@@ -536,10 +611,21 @@ Returns the index where TIME fits to maintain descending order."
            do (oset window-spec habit habit)))
 
 (defclass org-window-habit-assessment-window ()
-  ((assessment-start-time :initarg :assessment-start-time)
-   (assessment-end-time :initarg :assessment-end-time)
-   (start-time :initarg :start-time)
-   (end-time :initarg :end-time)))
+  ((assessment-start-time
+    :initarg :assessment-start-time
+    :documentation "Start of the current assessment interval (when we re-evaluate).")
+   (assessment-end-time
+    :initarg :assessment-end-time
+    :documentation "End of the current assessment interval.")
+   (start-time
+    :initarg :start-time
+    :documentation "Start of the data window (how far back we look for completions).")
+   (end-time
+    :initarg :end-time
+    :documentation "End of the data window (same as assessment-end-time)."))
+  "Represents a time window for evaluating habit conformity.
+The assessment interval [assessment-start-time, assessment-end-time) is when
+we evaluate, while [start-time, end-time) is the range we look for completions.")
 
 (cl-defmethod org-window-habit-time-falls-in-assessment-interval
     ((window org-window-habit-assessment-window) time)
@@ -606,12 +692,16 @@ STR should be a lisp list like (:monday :wednesday :friday)."
                      :max-repetitions-per-interval max-repetitions-per-interval))))
 
 (defun org-window-habit-create-specs ()
+  "Parse WINDOW_SPECS property into a list of window-spec objects.
+Returns nil if the property is not set."
   (let ((spec-text (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)))
     (when spec-text
       (cl-loop for args in (car (read-from-string spec-text))
                collect (apply #'make-instance 'org-window-habit-window-spec args)))))
 
 (defun org-window-habit-create-specs-from-perfect-okay ()
+  "Create a single window-spec from WINDOW_DURATION and REPETITIONS_REQUIRED.
+This is the simple configuration format for habits with one evaluation window."
   (let*
       ((window-length
         (org-window-habit-string-duration-to-plist
@@ -627,18 +717,31 @@ STR should be a lisp list like (:monday :wednesday :friday)."
       'org-window-habit-window-spec
       :duration window-length
       :repetitions repetitions-required
+      ;; Default conforming-value of 1.0 gives this spec full weight in aggregation
       :value 1.0))))
 
 
 ;; Iterator
 
 (defclass org-window-habit-iterator ()
-  ((window-spec :initarg :window-spec)
-   (window :initarg :window)
-   (start-index :initarg :start-index)
-   (end-index :initarg :end-index)))
+  ((window-spec
+    :initarg :window-spec
+    :documentation "The `org-window-habit-window-spec' this iterator is evaluating.")
+   (window
+    :initarg :window
+    :documentation "Current `org-window-habit-assessment-window' being evaluated.")
+   (start-index
+    :initarg :start-index
+    :documentation "Index into done-times vector for window start (inclusive).")
+   (end-index
+    :initarg :end-index
+    :documentation "Index into done-times vector for window end (exclusive)."))
+  "Iterator for stepping through assessment windows of a habit.
+Maintains position in the done-times array for efficient traversal.")
 
 (cl-defun org-window-habit-iterator-from-time (window-spec &optional time)
+  "Create an iterator for WINDOW-SPEC positioned at TIME.
+TIME defaults to current time.  Returns an iterator ready for evaluation."
   (setq time (or time (current-time)))
   (let* ((iterator
           (make-instance 'org-window-habit-iterator
@@ -651,6 +754,9 @@ STR should be a lisp list like (:monday :wednesday :friday)."
 
 (cl-defmethod org-window-habit-advance
   ((iterator org-window-habit-iterator) &key (amount nil))
+  "Move ITERATOR forward (or backward) by AMOUNT.
+AMOUNT defaults to the habit's assessment-interval.
+Updates the window and adjusts indices into the done-times array."
   (with-slots (window window-spec) iterator
     (unless amount
       (setq amount (oref (oref window-spec habit) assessment-interval)))
@@ -668,6 +774,9 @@ STR should be a lisp list like (:monday :wednesday :friday)."
 (cl-defmethod org-window-habit-adjust-iterator-indices
   ((iterator org-window-habit-iterator)
    &optional window-moved-forward)
+  "Update ITERATOR's indices to match its current window.
+WINDOW-MOVED-FORWARD indicates search direction for efficiency.
+Indices point into the habit's done-times vector."
   (with-slots (window start-index end-index window-spec) iterator
       (cl-destructuring-bind (new-start-index new-end-index)
           (org-window-habit-get-completion-window-indices
@@ -681,6 +790,9 @@ STR should be a lisp list like (:monday :wednesday :friday)."
 
 (cl-defmethod org-window-habit-conforming-ratio
   ((iterator org-window-habit-iterator) &rest args)
+  "Calculate the conforming ratio for ITERATOR's current window.
+Returns completions / (scale * target), clamped to [0.0, 1.0].
+A ratio of 1.0 means fully conforming; lower values indicate falling behind."
   (with-slots (window-spec window start-index) iterator
     (min
      1.0
@@ -696,6 +808,9 @@ STR should be a lisp list like (:monday :wednesday :friday)."
 
 (cl-defmethod org-window-habit-actual-window-scale
   ((iterator org-window-habit-iterator))
+  "Calculate the effective window scale for ITERATOR.
+Returns a value between 0.0 and 1.0 representing what fraction of
+the window is actually active (accounts for habit start time)."
   (with-slots (window) iterator
     (org-window-habit-duration-proportion
      (oref window start-time) (oref window end-time)
@@ -726,6 +841,7 @@ Returns nil for variable-length durations (:months, :years, :weeks with :start).
     ;; Return nil for variable-length or week-aligned durations
     (if (or months years weeks)
         nil
+      ;; Convert to seconds: 86400 = seconds/day, 3600 = seconds/hour, 60 = seconds/minute
       (+ (* days 86400)
          (* hours 3600)
          (* minutes 60)
@@ -872,6 +988,10 @@ Otherwise, counts only completions that fall on allowed days."
 (cl-defmethod org-window-habit-get-completion-count
   ((habit org-window-habit) start-time end-time &key (start-index 0)
    (fill-completions-fn (lambda (_time actual-completions) actual-completions)))
+  "Count completions for HABIT between START-TIME and END-TIME.
+Respects max-repetitions-per-interval, reset-time, and only-days filters.
+START-INDEX optimizes lookup in the done-times vector.
+FILL-COMPLETIONS-FN allows modifying counts per interval (used for projections)."
   ;; Clamp start-time to not be before reset-time (if set)
   ;; This ensures completions before reset are not counted
   (let ((effective-start-time
@@ -907,7 +1027,11 @@ Otherwise, counts only completions that fall on allowed days."
      while (time-less-p effective-start-time interval-start-time))))
 
 (cl-defmethod org-window-habit-get-next-required-interval
-  ((habit org-window-habit) &optional now) (setq now (or now (current-time)))
+  ((habit org-window-habit) &optional now)
+  "Find the next time when HABIT will need a completion.
+Searches forward from NOW until the conforming ratio drops below
+reschedule-threshold.  Respects only-days restrictions."
+  (setq now (or now (current-time)))
   (with-slots
       (window-specs reschedule-interval reschedule-threshold assessment-interval
                     aggregation-fn done-times only-days)
@@ -982,9 +1106,15 @@ Otherwise, counts only completions that fall on allowed days."
 ;; Graph functions
 
 (cl-defmethod org-window-habit-has-any-done-times ((habit org-window-habit))
+  "Return non-nil if HABIT has any recorded completions."
   (> (length (oref habit done-times)) 0))
 
 (cl-defmethod org-window-habit-build-graph ((habit org-window-habit) &optional now)
+  "Build the consistency graph data for HABIT as of NOW.
+Returns a list of (character face) pairs for each interval:
+- Past intervals showing historical conformity
+- Present interval showing current status
+- Future intervals projecting expected conformity"
   (setq now (or now (current-time)))
   (with-slots
       (assessment-decrement-plist window-specs reschedule-interval
@@ -1082,6 +1212,8 @@ Otherwise, counts only completions that fall on allowed days."
                     (oref (car iterators) window))))))))))
 
 (defun org-window-habit-make-graph-string (graph-info)
+  "Convert GRAPH-INFO into a propertized string for display.
+GRAPH-INFO is a list of (character face) pairs."
   (let ((graph (make-string (length graph-info) ?\s)))
     (cl-loop for (character face) in graph-info
              for index from 0
@@ -1197,6 +1329,8 @@ After the log note is added, this:
 ;; Default graph display functions
 
 (defun org-window-habit-create-face (bg-color foreground-color)
+  "Create or return a face with BG-COLOR background and FOREGROUND-COLOR.
+Face names are cached based on color values to avoid recreating faces."
   (let* ((bg-name (replace-regexp-in-string "#" "" bg-color))
          (fg-name (replace-regexp-in-string "#" "" foreground-color))
          (face-name (intern (format "org-window-habit-face-bg-%s-fg-%s" bg-name fg-name))))
@@ -1208,10 +1342,15 @@ After the log note is added, this:
         face-name))))
 
 (defun org-window-habit-rescale-assessment-value (value)
+  "Apply non-conforming scale to VALUE if below 1.0.
+Values at or above 1.0 (fully conforming) are returned unchanged."
   (if (>= value 1.0) value
     (*  org-window-habit-non-conforming-scale value)))
 
 (defun org-window-habit-lerp-color (color1 color2 proportion)
+  "Linearly interpolate between COLOR1 and COLOR2 by PROPORTION.
+PROPORTION of 0.0 returns COLOR1, 1.0 returns COLOR2.
+Colors should be hex strings like \"#RRGGBB\"."
   (let ((r1 (string-to-number (substring color1 1 3) 16))
         (g1 (string-to-number (substring color1 3 5) 16))
         (b1 (string-to-number (substring color1 5 7) 16))
@@ -1230,6 +1369,13 @@ After the log note is added, this:
      current-interval-time-type
      habit
      window)
+  "Determine graph character and face for an interval.
+WITHOUT-COMPLETION-ASSESSMENT-VALUE is the ratio if no completion today.
+WITH-COMPLETION-ASSESSMENT-VALUE is the ratio with today's completions.
+COMPLETIONS-IN-INTERVAL is how many completions occurred in this interval.
+CURRENT-INTERVAL-TIME-TYPE is \\='past, \\='present, or \\='future.
+HABIT and WINDOW provide context for computing next-required-interval.
+Returns (character face) or a list of such pairs for the present interval."
   (let* ((with-completion-color
           (org-window-habit-lerp-color
            org-window-habit-not-conforming-color
