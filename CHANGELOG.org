@@ -1,0 +1,57 @@
+* Changelog
+
+All notable changes to org-window-habit are documented in this file.
+
+** Unreleased
+
+*** Added
+- =OWH_ONLY_DAYS= property to restrict habits to specific days of the week (e.g., M/W/F)
+  - Completions on non-allowed days are ignored
+  - Rescheduling automatically targets the next allowed day
+- Week-aligned durations with configurable start day: =(:weeks 1 :start :monday)=
+- Assessment interval anchoring to habit start time for consistent evaluation periods
+- Comprehensive tests for week alignment, anchoring, and day-of-week restrictions
+
+*** Changed
+- Assessment boundaries for fixed-length intervals now anchor to the habit's start time rather than arbitrary calendar boundaries
+
+** 2024-01-XX
+
+*** Added
+- =OWH_RESET_TIME= property to ignore completions before a specified timestamp (fresh start)
+- =org-window-habit-entry-p= predicate function for programmatic habit detection
+- Auto-fix logbook order for backdated habit completions
+- Scenario-based tests for edge cases and multi-window specs
+- Nix-based test suite with 60+ ERT tests
+
+*** Fixed
+- Byte-compile error on Emacs snapshot for unknown slot 'habit'
+- Package-lint compatibility for Emacs 29.1
+
+** 2024-01-XX (Earlier)
+
+*** Added
+- Traditional org-habit style examples in README
+- Comprehensive README documentation with examples
+- CI integration and MELPA review compliance
+- Multiple window specifications support (=OWH_WINDOW_SPECS=)
+- Customizable property prefix (=org-window-habit-property-prefix=)
+- Max repetitions per interval (=OWH_MAX_REPETITIONS_PER_INTERVAL=)
+- Reschedule interval (=OWH_RESCHEDULE_INTERVAL=)
+- Visual conformity graph in agenda
+- Automatic repeater addition if not present
+
+*** Fixed
+- Handle habits with no done times
+- Color of completion glyph on current date
+- Index comparison logic for completion windows
+
+** Initial Release
+
+*** Added
+- Window-based habit tracking for org-mode
+- Rolling time window evaluation instead of binary daily tracking
+- Conforming ratio calculation
+- Automatic rescheduling based on conformity
+- Support for various duration formats (days, weeks, months, hours)
+- Integration with org-agenda

@@ -2132,5 +2132,293 @@ Uses explicit start-time to ensure full window durations apply."
     ;; Monthly: 7/20 = partial (~0.35)
     (should (< (org-window-habit-conforming-ratio monthly-iter) 0.5))))
 
+;;; ---------------------------------------------------------------------------
+;;; Multiple Completions Per Day Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-multiple-completions-same-day-default ()
+  "Test that multiple completions on the same day count as 1 by default.
+This is the max-repetitions-per-interval behavior with default value of 1."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; 5 completions all on the same day (Jan 15)
+         (done-times (vector
+                      (owh-test-make-time 2024 1 15 17 0 0)
+                      (owh-test-make-time 2024 1 15 14 0 0)
+                      (owh-test-make-time 2024 1 15 11 0 0)
+                      (owh-test-make-time 2024 1 15 9 0 0)
+                      (owh-test-make-time 2024 1 15 7 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :start-time (owh-test-make-time 2024 1 10 0 0 0))))
+    ;; Only 1 completion should count, not 5
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 10 0 0 0)
+                  (owh-test-make-time 2024 1 17 0 0 0))))
+      (should (= count 1)))))
+
+(ert-deftest owh-test-multiple-completions-different-days ()
+  "Test that completions on different days each count."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; 5 completions on 5 different days
+         (done-times (vector
+                      (owh-test-make-time 2024 1 15 10 0 0)
+                      (owh-test-make-time 2024 1 14 10 0 0)
+                      (owh-test-make-time 2024 1 13 10 0 0)
+                      (owh-test-make-time 2024 1 12 10 0 0)
+                      (owh-test-make-time 2024 1 11 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :start-time (owh-test-make-time 2024 1 10 0 0 0))))
+    ;; All 5 should count
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 10 0 0 0)
+                  (owh-test-make-time 2024 1 17 0 0 0))))
+      (should (= count 5)))))
+
+(ert-deftest owh-test-multiple-completions-mixed ()
+  "Test mixed scenario: some days have multiple, some have one."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; 3 completions on Jan 15, 2 on Jan 14, 1 on Jan 13 = 6 total
+         ;; But with max-1-per-interval, should count as 3 days
+         (done-times (vector
+                      (owh-test-make-time 2024 1 15 17 0 0)
+                      (owh-test-make-time 2024 1 15 12 0 0)
+                      (owh-test-make-time 2024 1 15 8 0 0)
+                      (owh-test-make-time 2024 1 14 15 0 0)
+                      (owh-test-make-time 2024 1 14 9 0 0)
+                      (owh-test-make-time 2024 1 13 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :start-time (owh-test-make-time 2024 1 10 0 0 0))))
+    ;; Should count as 3 (one per day for 3 days)
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 10 0 0 0)
+                  (owh-test-make-time 2024 1 17 0 0 0))))
+      (should (= count 3)))))
+
+(ert-deftest owh-test-max-reps-per-interval-higher-value ()
+  "Test with max-repetitions-per-interval set to 2."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 10))
+         ;; 4 completions on Jan 15, should count as 2 with max=2
+         (done-times (vector
+                      (owh-test-make-time 2024 1 15 18 0 0)
+                      (owh-test-make-time 2024 1 15 14 0 0)
+                      (owh-test-make-time 2024 1 15 10 0 0)
+                      (owh-test-make-time 2024 1 15 8 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 2
+                               :done-times done-times
+                               :start-time (owh-test-make-time 2024 1 10 0 0 0))))
+    ;; Should count as 2 (max per day is 2)
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 10 0 0 0)
+                  (owh-test-make-time 2024 1 17 0 0 0))))
+      (should (= count 2)))))
+
+;;; ---------------------------------------------------------------------------
+;;; ONLY_DAYS Feature Tests (Day-of-Week Filtering)
+;;; ---------------------------------------------------------------------------
+;;; These tests define the expected behavior for the ONLY_DAYS feature.
+;;; They will fail until the feature is implemented.
+
+(defun owh-test-day-of-week (time)
+  "Get day of week for TIME as a keyword (:sunday, :monday, etc.)."
+  (let ((dow (nth 6 (decode-time time))))
+    (nth dow '(:sunday :monday :tuesday :wednesday :thursday :friday :saturday))))
+
+(ert-deftest owh-test-only-days-completion-filtering ()
+  "Test that ONLY_DAYS filters which completions count.
+With only-days set to M/W/F, completions on other days shouldn't count."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; Week of Jan 15-21, 2024:
+         ;; Mon 15, Tue 16, Wed 17, Thu 18, Fri 19, Sat 20, Sun 21
+         ;; Completions on Mon, Tue, Wed, Thu, Fri (5 total)
+         ;; But only M/W/F should count (3)
+         (done-times (vector
+                      (owh-test-make-time 2024 1 19 10 0 0)  ; Friday
+                      (owh-test-make-time 2024 1 18 10 0 0)  ; Thursday - shouldn't count
+                      (owh-test-make-time 2024 1 17 10 0 0)  ; Wednesday
+                      (owh-test-make-time 2024 1 16 10 0 0)  ; Tuesday - shouldn't count
+                      (owh-test-make-time 2024 1 15 10 0 0))) ; Monday
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :only-days '(:monday :wednesday :friday)
+                               :start-time (owh-test-make-time 2024 1 15 0 0 0))))
+    ;; Only 3 should count (Mon, Wed, Fri)
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 15 0 0 0)
+                  (owh-test-make-time 2024 1 22 0 0 0))))
+      (should (= count 3)))))
+
+(ert-deftest owh-test-only-days-mwf-conformity ()
+  "Test M/W/F habit conformity when all required days are completed."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; Completions on Mon, Wed, Fri only
+         (done-times (vector
+                      (owh-test-make-time 2024 1 19 10 0 0)  ; Friday
+                      (owh-test-make-time 2024 1 17 10 0 0)  ; Wednesday
+                      (owh-test-make-time 2024 1 15 10 0 0))) ; Monday
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :only-days '(:monday :wednesday :friday)
+                               ;; Start early enough so full 7-day window is active
+                               :start-time (owh-test-make-time 2024 1 8 0 0 0)))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 19 23 0 0))))
+    ;; 3/3 = 100% conforming
+    (should (>= (org-window-habit-conforming-ratio iterator) 0.99))))
+
+(ert-deftest owh-test-only-days-missed-one ()
+  "Test M/W/F habit when one required day is missed."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; Only completed on Mon and Fri, missed Wed
+         (done-times (vector
+                      (owh-test-make-time 2024 1 19 10 0 0)  ; Friday
+                      (owh-test-make-time 2024 1 15 10 0 0))) ; Monday
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :only-days '(:monday :wednesday :friday)
+                               ;; Start early enough so full 7-day window is active
+                               :start-time (owh-test-make-time 2024 1 8 0 0 0)))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 19 23 0 0))))
+    ;; 2/3 ≈ 0.67
+    (let ((ratio (org-window-habit-conforming-ratio iterator)))
+      (should (< ratio 0.8))
+      (should (> ratio 0.6)))))
+
+(ert-deftest owh-test-only-days-completion-on-wrong-day-ignored ()
+  "Test that completing on a non-allowed day doesn't count."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; Completed on Tue, Thu, Sat - none of these are allowed!
+         (done-times (vector
+                      (owh-test-make-time 2024 1 20 10 0 0)  ; Saturday
+                      (owh-test-make-time 2024 1 18 10 0 0)  ; Thursday
+                      (owh-test-make-time 2024 1 16 10 0 0))) ; Tuesday
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :only-days '(:monday :wednesday :friday)
+                               :start-time (owh-test-make-time 2024 1 15 0 0 0))))
+    ;; 0 completions should count
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 15 0 0 0)
+                  (owh-test-make-time 2024 1 22 0 0 0))))
+      (should (= count 0)))))
+
+(ert-deftest owh-test-only-days-weekend-habit ()
+  "Test a weekend-only habit (Saturday and Sunday)."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 2))
+         ;; Completed on Sat and Sun
+         (done-times (vector
+                      (owh-test-make-time 2024 1 21 10 0 0)  ; Sunday
+                      (owh-test-make-time 2024 1 20 10 0 0))) ; Saturday
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :only-days '(:saturday :sunday)
+                               ;; Start early enough so full 7-day window is active
+                               :start-time (owh-test-make-time 2024 1 8 0 0 0)))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 21 23 0 0))))
+    ;; 2/2 = 100% conforming
+    (should (>= (org-window-habit-conforming-ratio iterator) 0.99))))
+
+(ert-deftest owh-test-only-days-rescheduling ()
+  "Test that rescheduling targets only allowed days."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; Completed on Monday Jan 15
+         (done-times (vector (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               :only-days '(:monday :wednesday :friday)
+                               :start-time (owh-test-make-time 2024 1 15 0 0 0)))
+         ;; Query from Tuesday Jan 16
+         (next-required (org-window-habit-get-next-required-interval
+                         habit (owh-test-make-time 2024 1 16 10 0 0))))
+    ;; Should schedule to Wednesday Jan 17, not Tuesday
+    (should (owh-test-times-equal-p
+             next-required
+             (owh-test-make-time 2024 1 17 0 0 0)))))
+
+(ert-deftest owh-test-only-days-nil-means-all-days ()
+  "Test that nil/unset only-days means all days are allowed (default behavior)."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; Completions on various days
+         (done-times (vector
+                      (owh-test-make-time 2024 1 19 10 0 0)  ; Friday
+                      (owh-test-make-time 2024 1 18 10 0 0)  ; Thursday
+                      (owh-test-make-time 2024 1 17 10 0 0)  ; Wednesday
+                      (owh-test-make-time 2024 1 16 10 0 0)  ; Tuesday
+                      (owh-test-make-time 2024 1 15 10 0 0))) ; Monday
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times done-times
+                               ;; No only-days set (nil)
+                               :start-time (owh-test-make-time 2024 1 15 0 0 0))))
+    ;; All 5 should count
+    (let ((count (org-window-habit-get-completion-count
+                  habit
+                  (owh-test-make-time 2024 1 15 0 0 0)
+                  (owh-test-make-time 2024 1 22 0 0 0))))
+      (should (= count 5)))))
+
 (provide 'org-window-habit-test)
 ;;; org-window-habit-test.el ends here

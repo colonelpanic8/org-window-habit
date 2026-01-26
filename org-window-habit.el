@@ -258,6 +258,32 @@ Property names respect `org-window-habit-property-prefix'."
     (:saturday 6)
     (_ (error "Invalid day symbol: %s" day-symbol))))
 
+(defun org-window-habit-day-of-week-symbol (day-number)
+  "Convert a day number (0=Sunday, ..., 6=Saturday) to a symbol."
+  (nth day-number '(:sunday :monday :tuesday :wednesday :thursday :friday :saturday)))
+
+(defun org-window-habit-time-on-allowed-day-p (time only-days)
+  "Return non-nil if TIME falls on one of ONLY-DAYS.
+ONLY-DAYS is a list of day symbols like (:monday :wednesday :friday).
+If ONLY-DAYS is nil, all days are allowed."
+  (or (null only-days)
+      (let ((day-of-week (org-window-habit-day-of-week-symbol
+                          (nth 6 (decode-time time)))))
+        (memq day-of-week only-days))))
+
+(defun org-window-habit-next-allowed-day (time only-days)
+  "Return TIME if it's on an allowed day, otherwise the next allowed day.
+If ONLY-DAYS is nil, returns TIME unchanged."
+  (if (or (null only-days)
+          (org-window-habit-time-on-allowed-day-p time only-days))
+      time
+    ;; Find next allowed day by advancing one day at a time (max 7 iterations)
+    (cl-loop for i from 1 to 7
+             for next-time = (org-window-habit-keyed-duration-add-plist time (list :days i))
+             when (org-window-habit-time-on-allowed-day-p next-time only-days)
+             return next-time
+             finally return time)))
+
 (defun org-window-habit-normalize-time-to-duration
     (time-value duration-plist)
   (let* ((alignment-decoded (decode-time time-value))
@@ -478,6 +504,7 @@ Returns the index where TIME fits to maintain descending order."
    (aggregation-fn :initarg :aggregation-fn :initform 'org-window-habit-default-aggregation-fn)
    (graph-assessment-fn :initarg :graph-assessment-fn :initform nil)
    (reset-time :initarg :reset-time :initform nil)
+   (only-days :initarg :only-days :initform nil)
    (start-time :initarg :start-time :initform nil)))
 
 (defclass org-window-habit-window-spec ()
@@ -533,6 +560,12 @@ Returns the index where TIME fits to maintain descending order."
      (format "start-time: %s" (org-window-habit-time-to-string start-time))
      (format "end-time: %s" (org-window-habit-time-to-string end-time)))))
 
+(defun org-window-habit-parse-only-days (str)
+  "Parse ONLY_DAYS property string STR into a list of day symbols.
+STR should be a lisp list like (:monday :wednesday :friday)."
+  (when str
+    (car (read-from-string str))))
+
 (defun org-window-habit-create-instance-from-heading-at-point ()
   "Construct an `org-window-habit' instance from the current org entry."
   (save-excursion
@@ -556,10 +589,14 @@ Returns the index where TIME fits to maintain descending order."
             (org-entry-get nil (org-window-habit-property "RESET_TIME")))
            (reset-time
             (when reset-time-str
-              (org-time-string-to-time reset-time-str))))
+              (org-time-string-to-time reset-time-str)))
+           (only-days
+            (org-window-habit-parse-only-days
+             (org-entry-get nil (org-window-habit-property "ONLY_DAYS")))))
       (make-instance 'org-window-habit
                      :start-time nil
                      :reset-time reset-time
+                     :only-days only-days
                      :window-specs (or
                                     (org-window-habit-create-specs)
                                     (org-window-habit-create-specs-from-perfect-okay))
@@ -820,6 +857,18 @@ If there are no completions after reset, return nil."
 
 ;; Compute completions and required
 
+(cl-defmethod org-window-habit-count-completions-in-index-range
+  ((habit org-window-habit) start-idx end-idx)
+  "Count completions between START-IDX and END-IDX, filtering by only-days.
+If only-days is nil, returns the simple count (end-idx - start-idx).
+Otherwise, counts only completions that fall on allowed days."
+  (with-slots (done-times only-days) habit
+    (if (null only-days)
+        (- end-idx start-idx)
+      (cl-loop for i from start-idx below end-idx
+               for completion-time = (aref done-times i)
+               count (org-window-habit-time-on-allowed-day-p completion-time only-days)))))
+
 (cl-defmethod org-window-habit-get-completion-count
   ((habit org-window-habit) start-time end-time &key (start-index 0)
    (fill-completions-fn (lambda (_time actual-completions) actual-completions)))
@@ -844,12 +893,14 @@ If there are no completions after reset, return nil."
       habit interval-start-time interval-end-time
       :start-index next-start-index
       :end-index next-start-index)
+     for raw-completions = (org-window-habit-count-completions-in-index-range
+                            habit start-index end-index)
      for completions-within-interval =
      (min (oref habit max-repetitions-per-interval)
           (funcall
            fill-completions-fn
            interval-start-time
-           (- end-index start-index)))
+           raw-completions))
      sum completions-within-interval
      do (setq next-start-index end-index
               interval-end-time interval-start-time)
@@ -859,33 +910,36 @@ If there are no completions after reset, return nil."
   ((habit org-window-habit) &optional now) (setq now (or now (current-time)))
   (with-slots
       (window-specs reschedule-interval reschedule-threshold assessment-interval
-                    aggregation-fn done-times)
+                    aggregation-fn done-times only-days)
       habit
-    (if (org-window-habit-has-any-done-times habit)
-        (cl-loop
-         with start-time =
-         (org-window-habit-normalize-time-to-duration
-          (org-window-habit-time-max
-           now
-           (org-window-habit-keyed-duration-add-plist (aref done-times 0)
-                                                      reschedule-interval))
-          assessment-interval)
-         with iterators =
-         (cl-loop for window-spec in window-specs
-                  collect
-                  (org-window-habit-iterator-from-time window-spec start-time))
-         for current-assessment-start = (oref (oref (car iterators) window) assessment-start-time)
-         for conforming-values =
-         (cl-loop for iterator in iterators
-                  collect (org-window-habit-get-conforming-value iterator))
-         for assessment-value = (funcall aggregation-fn conforming-values)
-         until (< assessment-value reschedule-threshold)
-         do
-         (cl-loop for iterator in iterators
-                  do (org-window-habit-advance iterator))
-         finally return current-assessment-start)
-      (org-window-habit-normalize-time-to-duration
-       now assessment-interval))))
+    (let ((raw-result
+           (if (org-window-habit-has-any-done-times habit)
+               (cl-loop
+                with start-time =
+                (org-window-habit-normalize-time-to-duration
+                 (org-window-habit-time-max
+                  now
+                  (org-window-habit-keyed-duration-add-plist (aref done-times 0)
+                                                             reschedule-interval))
+                 assessment-interval)
+                with iterators =
+                (cl-loop for window-spec in window-specs
+                         collect
+                         (org-window-habit-iterator-from-time window-spec start-time))
+                for current-assessment-start = (oref (oref (car iterators) window) assessment-start-time)
+                for conforming-values =
+                (cl-loop for iterator in iterators
+                         collect (org-window-habit-get-conforming-value iterator))
+                for assessment-value = (funcall aggregation-fn conforming-values)
+                until (< assessment-value reschedule-threshold)
+                do
+                (cl-loop for iterator in iterators
+                         do (org-window-habit-advance iterator))
+                finally return current-assessment-start)
+             (org-window-habit-normalize-time-to-duration
+              now assessment-interval))))
+      ;; Snap to next allowed day if only-days is set
+      (org-window-habit-next-allowed-day raw-result only-days))))
 
 (cl-defmethod org-window-habit-assess-interval
   ((habit org-window-habit) iterators &rest args)

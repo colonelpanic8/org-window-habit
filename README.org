@@ -204,6 +204,7 @@ All properties use the =OWH_= prefix by default (configurable via =org-window-ha
 | =OWH_RESCHEDULE_INTERVAL=          | =(:days 1)=   | Minimum time after completion before rescheduling       |
 | =OWH_MAX_REPETITIONS_PER_INTERVAL= | =1=           | Cap on completions counted per assessment interval      |
 | =OWH_RESET_TIME=                   | (none)        | Timestamp to ignore completions before (fresh start)    |
+| =OWH_ONLY_DAYS=                    | (none)        | Restrict habit to specific days of week (e.g., M/W/F)   |
 
 ** Reading the Agenda Graph
 
@@ -273,3 +274,43 @@ SCHEDULED: <2024-01-19 Fri .+1d>
 :OWH_ASSESSMENT_INTERVAL: (:weeks 1 :start :friday)
 :END:
 #+end_src
+
+*** Day-of-Week Restrictions
+
+Some habits only make sense on specific days of the week. For example, you might go to the gym on Monday, Wednesday, and Friday, or do meal prep only on weekends. The =OWH_ONLY_DAYS= property lets you restrict which days count toward your habit.
+
+When =OWH_ONLY_DAYS= is set:
+- Completions on non-allowed days are *ignored* when counting toward your goal
+- Rescheduling automatically targets the *next allowed day*
+
+The format is a list of day symbols: =(:monday :wednesday :friday)=
+
+Available days: =:sunday=, =:monday=, =:tuesday=, =:wednesday=, =:thursday=, =:friday=, =:saturday=
+
+*Example: M/W/F gym habit*
+#+begin_src org
+,* TODO Go to gym
+SCHEDULED: <2024-01-15 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_WINDOW_DURATION: 1w
+:OWH_REPETITIONS_REQUIRED: 3
+:OWH_ONLY_DAYS: (:monday :wednesday :friday)
+:END:
+#+end_src
+
+This requires 3 gym visits per week, but only Monday, Wednesday, and Friday completions count. If you complete on Tuesday by mistake, it won't count toward your goal. After completing on Monday, the habit reschedules to Wednesday (skipping Tuesday).
+
+*Example: Weekend meal prep*
+#+begin_src org
+,* TODO Meal prep for the week
+SCHEDULED: <2024-01-20 Sat .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_WINDOW_DURATION: 1w
+:OWH_REPETITIONS_REQUIRED: 1
+:OWH_ONLY_DAYS: (:saturday :sunday)
+:END:
+#+end_src
+
+This requires meal prep once per week, but only on weekends. Completing on a weekday won't count.
