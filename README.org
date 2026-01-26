@@ -1,15 +1,55 @@
-* org-window-habit README
-** Overview
-org-window-habit is an Emacs package that replaces Org Mode's habit-tracking
-functionality. It allows for more complex habit assessment and rescheduling
-logic, defined in terms of one or more windows in which a specific number of
-repetitions should be completed. Instead of relying on a simple schedule (i.e.
-org repeaters), org-window-habit uses a sophisticated and very customizable
-method to evaluate habit compliance and decide on rescheduling.
-** Quick Start
-*** Sample Configuration
-org-window-habit is not yet on melpa and so must be installed from git. With
-straight.el, the following should work:
+* org-window-habit
+
+** Why org-window-habit?
+
+Standard =org-habit= tracks habits using fixed repeater intervals: complete the habit, and it reschedules for the next interval. This works well for habits with predictable schedules, but many real-world habits don't fit that model:
+
+- *Exercise 5 times per week* - You don't care /which/ 5 days, just that you hit 5 within any 7-day window
+- *Read 4 books per month* - Finishing one book per week is fine, but so is reading two books in the first week and two in the last
+- *Take medication 3 times per day* - The exact hours don't matter, just the count within each 24-hour period
+
+With standard =org-habit=, missing a single day shows as a "failure" in your consistency graph, even if you're exceeding your actual goals. This can be demoralizing and doesn't reflect how habits actually work in practice.
+
+=org-window-habit= replaces this binary daily model with *window-based tracking*: instead of asking "did you do it today?", it asks "have you done it enough times within this time window?"
+
+** The Window Habit Concept
+
+A *window habit* evaluates your compliance over a rolling time window rather than a single day. You define:
+
+1. *Window Duration* - How far back to look when counting completions (e.g., 7 days, 1 month)
+2. *Repetitions Required* - How many completions are needed within that window (e.g., 5 times)
+3. *Assessment Interval* - How often to re-evaluate, i.e., the step size for the rolling window (e.g., daily)
+
+Note that window duration and assessment interval serve different purposes: the *window duration* determines how much history counts toward your goal, while the *assessment interval* determines how granularly the window rolls forward. For example, with a 7-day window and 1-day assessment interval, you get a fresh evaluation each day that looks back at the previous 7 days. If the assessment interval were also 7 days, the window would jump weekly rather than rolling daily.
+
+A practical example where these differ: suppose you want to write 8 blog posts per month, but you don't want daily nagging - just a weekly check-in. You'd set a 1-month window duration with a 1-week assessment interval. Each week, the system evaluates whether you're on track for your monthly goal, and the habit only appears in your agenda at weekly boundaries.
+
+The library tracks your completions and calculates a *conforming ratio* - are you on track to meet your goal? The agenda graph shows this visually, with colors indicating your conformity status (by default, green when conforming and red when falling behind).
+
+When you complete a habit, org-window-habit automatically reschedules it to the next date when a completion will be needed to maintain conformity, rather than using a fixed repeater interval.
+
+*** Example: Weekly Exercise
+
+You want to exercise 5 times per week. With org-window-habit:
+
+#+begin_src org
+,* TODO Exercise
+SCHEDULED: <2024-01-15 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_WINDOW_DURATION: 1w
+:OWH_REPETITIONS_REQUIRED: 5
+:END:
+#+end_src
+
+If you exercise Monday, Tuesday, Wednesday, Thursday, and Friday, you've met your goal for the week. Saturday and Sunday will show as "optional" - you don't need to exercise, but you can if you want to build buffer.
+
+If you only exercised 3 times so far this week and it's Friday, the graph shows you're behind and the habit appears as requiring completion.
+
+** Installation
+
+org-window-habit is not yet on MELPA. Install from git using =straight.el=:
+
 #+begin_src emacs-lisp
 (use-package org-window-habit
   :demand t
@@ -19,49 +59,114 @@ straight.el, the following should work:
    :host github
    :files ("org-window-habit.el"))
   :config
-  (progn
-    (org-window-habit-mode +1)))
+  (org-window-habit-mode +1))
 #+end_src
 
-*** Habit Tracking
-Define a org heading with a TODO state and a SCHEDULED or DEADLINE with any
-repeater. The actual length of the repeater does not matter, since a different
-mechanism will be used to assign new due dates, but it is important (for the
-time being) that some type of repeater is present. You also need to add :STYLE:
-habit under :PROPERTIES: to signal that this is a habit entry.
+** Basic Usage
+
+*** Creating a Window Habit
+
+1. Create a TODO heading with =SCHEDULED= or =DEADLINE= that has any repeater (the repeater value doesn't matter - org-window-habit uses its own rescheduling logic, but a repeater must be present)
+2. Add =:STYLE: habit= under =:PROPERTIES:=
+3. Add window habit properties (prefixed with =OWH_=)
+
+*** Simple Configuration
+
+For a single evaluation window, use these properties:
+
+| Property                       | Description                              | Example  |
+|--------------------------------+------------------------------------------+----------|
+| =OWH_WINDOW_DURATION=          | Length of the evaluation window          | =1w=     |
+| =OWH_REPETITIONS_REQUIRED=     | Target completions within the window     | =5=      |
+| =OWH_OKAY_REPETITIONS_REQUIRED= | Minimum acceptable completions (optional) | =3=      |
+
+*Weekly exercise example:*
 #+begin_src org
-**** TODO [#C] Weights
-SCHEDULED: <2023-09-12 Tue 16:30> DEADLINE: <2023-09-12 Tue .+2d>
+,* TODO Workout
+SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
+:OWH_WINDOW_DURATION: 1w
+:OWH_REPETITIONS_REQUIRED: 5
+:OWH_OKAY_REPETITIONS_REQUIRED: 3
 :END:
 #+end_src
-*** Using Simple Repetitions Requirements
-If you only want to define a single window over which the habit will be
-evaluated you can use =:WINDOW_DURATION:= =:REPETITIONS_REQUIRED:= and
-=:OKAY_REPETITIONS_REQUIRED:= to set simple conditions for habit assessment.
+
+This requires 5 workouts per week, with 3 being the minimum acceptable.
+
+*Monthly reading example:*
 #+begin_src org
-:WINDOW_DURATION: 1w
-:REPETITIONS_REQUIRED: 4
-:OKAY_REPETITIONS_REQUIRED: 3
+,* TODO Read a book
+SCHEDULED: <2024-01-15 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_WINDOW_DURATION: 1m
+:OWH_REPETITIONS_REQUIRED: 4
+:END:
 #+end_src
 
-*** Advanced Habit Specification
-Alternatively, you can use the =:WINDOW_SPECS:= property to define multiple assessment windows for your habit.
+*** Advanced Configuration: Multiple Windows
+
+For more complex requirements, use =OWH_WINDOW_SPECS= to define multiple evaluation windows. The habit must satisfy *all* windows simultaneously.
+
 #+begin_src org
-:WINDOW_SPECS: ((:duration (:days 4) :repetitions 1) (:duration (:days 6) :repetitions 2))
-:ASSESMENT_INTERVAL: (:days 1)
-:RESCHEDULE_INTERVAL: 2
+:PROPERTIES:
+:OWH_WINDOW_SPECS: ((:duration (:days 4) :repetitions 1) (:duration (:days 6) :repetitions 2))
+:END:
 #+end_src
 
-*** Assesment interval
-The =:ASSESMENT_INTERVAL:= parameter defaults to a period of 1 day when not specified.
-It  controls how much the rolling window for =:WINDOW_DURATION= is
-advanced for each evaluation of the habit. In other words, it determines the
-step size by which the rolling window moves forward in time for each habit
-assessment.
+This requires:
+- At least 1 completion in any 4-day window, AND
+- At least 2 completions in any 6-day window
 
-*** Reschedule interval
-The =:RESCHEDULE_INTERVAL:= parameter defaults to a period of 1 day when not
-specified. It controls the minimum amount of time that must pass after a
-completion before a habit can be rescheduled.
+This prevents both long gaps and insufficient frequency.
+
+** Configuration Properties Reference
+
+All properties use the =OWH_= prefix by default (configurable via =org-window-habit-property-prefix=).
+
+| Property                           | Default       | Description                                             |
+|------------------------------------+---------------+---------------------------------------------------------|
+| =OWH_WINDOW_DURATION=              | (required)    | Single window length (e.g., =1w=, =1m=, =(:days 7)=)    |
+| =OWH_REPETITIONS_REQUIRED=         | (required)    | Target completions for simple window                    |
+| =OWH_OKAY_REPETITIONS_REQUIRED=    | same as above | Minimum acceptable completions                          |
+| =OWH_WINDOW_SPECS=                 | (alternative) | List of window specs for complex requirements           |
+| =OWH_ASSESSMENT_INTERVAL=          | =(:days 1)=   | How often to re-evaluate (step size for rolling window) |
+| =OWH_RESCHEDULE_INTERVAL=          | =(:days 1)=   | Minimum time after completion before rescheduling       |
+| =OWH_MAX_REPETITIONS_PER_INTERVAL= | =1=           | Cap on completions counted per assessment interval      |
+| =OWH_RESET_TIME=                   | (none)        | Timestamp to ignore completions before (fresh start)    |
+
+** Reading the Agenda Graph
+
+Like =org-habit=, org-window-habit displays a consistency graph in the agenda. Each character represents one assessment interval (typically one day):
+
+- *Past intervals*: Show whether you were conforming (green) or not (red) at that time
+- *Current interval*: Shows whether you need to complete today:
+  - =☐= (box) - Completion needed today to stay on track
+  - =✓= (checkmark) - Already completed today (or not needed)
+- *Future intervals*: Project expected conformity based on current trajectory
+
+The colors indicate your conforming ratio:
+- Green shades: On track or ahead
+- Red shades: Falling behind on requirements
+
+** Customization
+
+Key customizable variables (=M-x customize-group RET org-window-habit=):
+
+| Variable                                         | Default     | Description                        |
+|--------------------------------------------------+-------------+------------------------------------|
+| =org-window-habit-property-prefix=               | ="OWH"=     | Prefix for org properties          |
+| =org-window-habit-preceding-intervals=           | =21=        | Days of history shown in graph     |
+| =org-window-habit-following-days=                | =4=         | Days of future projection in graph |
+| =org-window-habit-conforming-color=              | ="#4d7085"= | Color for conforming intervals     |
+| =org-window-habit-not-conforming-color=          | ="#d40d0d"= | Color for non-conforming intervals |
+| =org-window-habit-completion-needed-today-glyph= | =?☐=       | Character for "needed today"       |
+| =org-window-habit-completed-glyph=               | =?✓=        | Character for "completed"          |
+
+** Duration Format
+
+Window durations can be specified as:
+
+- Shorthand strings: =1d= (1 day), =1w= (1 week), =1m= (1 month), =2w= (2 weeks)
+- Property lists: =(:days 7)=, =(:weeks 1)=, =(:months 1)=, or combinations like =(:days 1 :hours 12)=
