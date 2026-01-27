@@ -868,20 +868,52 @@ Returns nil for variable-length durations (:months, :years, :weeks with :start).
 (defun org-window-habit-get-anchored-assessment-start (anchor-time current-time assessment-plist)
   "Get assessment start time anchored to ANCHOR-TIME containing CURRENT-TIME.
 ASSESSMENT-PLIST defines the interval length.
-For fixed-length intervals (days, hours), calculates which assessment period
-CURRENT-TIME falls into relative to ANCHOR-TIME.
+
+For day-based intervals, uses calendar arithmetic to correctly handle DST.
+Adding N days means adding N calendar days, not N*86400 seconds, because
+DST transition days are 23 or 25 hours.
+
+For sub-day intervals (hours, minutes, seconds), uses seconds arithmetic
+since these don't cross day boundaries where DST matters.
+
 For variable-length intervals (months, weeks), falls back to calendar alignment."
-  (let ((interval-seconds (org-window-habit-duration-plist-to-seconds assessment-plist)))
-    (if interval-seconds
-        ;; Fixed-length interval: calculate based on seconds since anchor
-        (let* ((anchor-seconds (float-time anchor-time))
-               (current-seconds (float-time current-time))
-               (elapsed (- current-seconds anchor-seconds))
-               (periods (floor (/ elapsed interval-seconds)))
-               (assessment-start-seconds (+ anchor-seconds (* periods interval-seconds))))
-          (seconds-to-time assessment-start-seconds))
-      ;; Variable-length interval: use calendar-based normalization
-      (org-window-habit-normalize-time-to-duration current-time assessment-plist))))
+  (let ((days (plist-get assessment-plist :days))
+        (interval-seconds (org-window-habit-duration-plist-to-seconds assessment-plist)))
+    (cond
+     ;; Day-based intervals: use calendar arithmetic to avoid DST issues
+     (days
+      (let* ((anchor-decoded (decode-time anchor-time))
+             (anchor-day (nth 3 anchor-decoded))
+             (anchor-month (nth 4 anchor-decoded))
+             (anchor-year (nth 5 anchor-decoded))
+             (anchor-hour (nth 2 anchor-decoded))
+             (anchor-minute (nth 1 anchor-decoded))
+             (anchor-second (nth 0 anchor-decoded))
+             ;; Convert both times to day numbers for integer arithmetic
+             (anchor-day-number (time-to-days anchor-time))
+             (current-day-number (time-to-days current-time))
+             ;; Calculate how many complete intervals have passed
+             (days-elapsed (- current-day-number anchor-day-number))
+             (periods (floor (/ (float days-elapsed) days)))
+             (total-days-to-add (* periods days))
+             ;; Compute the target day by adding to anchor's calendar date
+             (target-day (+ anchor-day total-days-to-add)))
+        ;; encode-time handles day overflow (e.g., Jan 32 -> Feb 1)
+        (encode-time anchor-second anchor-minute anchor-hour
+                     target-day anchor-month anchor-year)))
+
+     ;; Sub-day intervals: use seconds arithmetic (safe, no DST crossing)
+     (interval-seconds
+      (let* ((anchor-seconds (float-time anchor-time))
+             (current-seconds (float-time current-time))
+             (elapsed (- current-seconds anchor-seconds))
+             (periods (floor (/ elapsed interval-seconds)))
+             (assessment-start-seconds (+ anchor-seconds (* periods interval-seconds))))
+        (seconds-to-time assessment-start-seconds)))
+
+     ;; Variable-length intervals (months, weeks): use calendar normalization
+     (t
+      (org-window-habit-normalize-time-to-duration current-time assessment-plist)))))
 
 (defun org-window-habit-get-window-where-time-in-last-assessment (spec time)
   "Return assessment window for SPEC containing TIME."

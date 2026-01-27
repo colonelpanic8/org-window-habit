@@ -74,7 +74,10 @@
             touch $out
           '';
 
-          test = pkgs.runCommand "test" {} ''
+          test = pkgs.runCommand "test" {
+            # Include tzdata so DST-related tests can use set-time-zone-rule
+            TZDIR = "${pkgs.tzdata}/share/zoneinfo";
+          } ''
             ${emacsBin} --batch \
               --eval "(require 'package)" \
               --eval "(package-initialize)" \
@@ -89,7 +92,7 @@
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = [ emacsWithPackages ];
+          buildInputs = [ emacsWithPackages pkgs.just ];
 
           shellHook = ''
             echo "org-window-habit development environment"

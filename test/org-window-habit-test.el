@@ -2420,5 +2420,130 @@ With only-days set to M/W/F, completions on other days shouldn't count."
                   (owh-test-make-time 2024 1 22 0 0 0))))
       (should (= count 5)))))
 
+;;; DST (Daylight Saving Time) Tests
+;;;
+;;; These tests verify that assessment intervals work correctly across DST
+;;; transitions. The bug: using 86400 seconds for "one day" fails because
+;;; DST transition days are 23 or 25 hours, not 24.
+
+(ert-deftest owh-test-dst-assessment-preserves-time-of-day ()
+  "Test that assessment intervals preserve time-of-day across DST transitions.
+
+US Pacific time DST 2024:
+- March 10: clocks spring forward 2am->3am (day is 23 hours)
+- November 3: clocks fall back 2am->1am (day is 25 hours)
+
+If we anchor at noon on March 9 (before DST) and compute the assessment
+for March 11 (after DST), the assessment should still start at noon,
+not 1pm (which would happen if we naively add 86400 seconds per day).
+
+This test will only detect the bug when run in a DST-aware timezone."
+  ;; Set timezone to US Pacific for this test
+  (let ((original-tz (getenv "TZ")))
+    (unwind-protect
+        (progn
+          (setenv "TZ" "America/Los_Angeles")
+          ;; Force Emacs to pick up the new timezone
+          (set-time-zone-rule "America/Los_Angeles")
+
+          (let* (;; Anchor at noon on March 9, 2024 (last day before DST starts)
+                 (anchor-time (encode-time 0 0 12 9 3 2024))
+                 ;; Query for March 11, 2024 (first full day in DST)
+                 (query-time (encode-time 0 0 12 11 3 2024))
+                 ;; Get assessment start using the anchoring function
+                 (assessment-start
+                  (org-window-habit-get-anchored-assessment-start
+                   anchor-time query-time '(:days 1)))
+                 ;; Decode to check the hour
+                 (decoded (decode-time assessment-start))
+                 (hour (nth 2 decoded))
+                 (day (nth 3 decoded)))
+            ;; The assessment for March 11 should start at NOON on March 11
+            ;; Not at 1pm (13:00) which would happen with buggy 86400-second math
+            (should (= day 11))
+            (should (= hour 12))))
+      ;; Restore original timezone
+      (if original-tz
+          (setenv "TZ" original-tz)
+        (setenv "TZ" nil))
+      (set-time-zone-rule original-tz))))
+
+(ert-deftest owh-test-dst-fall-back-assessment-preserves-time-of-day ()
+  "Test assessment intervals across DST 'fall back' transition.
+
+November 3, 2024: clocks fall back 2am->1am (day is 25 hours)
+
+If we anchor at noon on November 2 and compute the assessment for
+November 4, it should still be at noon, not 11am."
+  (let ((original-tz (getenv "TZ")))
+    (unwind-protect
+        (progn
+          (setenv "TZ" "America/Los_Angeles")
+          (set-time-zone-rule "America/Los_Angeles")
+
+          (let* (;; Anchor at noon on November 2, 2024 (day before fall back)
+                 (anchor-time (encode-time 0 0 12 2 11 2024))
+                 ;; Query for November 4, 2024 (day after fall back)
+                 (query-time (encode-time 0 0 12 4 11 2024))
+                 (assessment-start
+                  (org-window-habit-get-anchored-assessment-start
+                   anchor-time query-time '(:days 1)))
+                 (decoded (decode-time assessment-start))
+                 (hour (nth 2 decoded))
+                 (day (nth 3 decoded)))
+            ;; Should be noon on November 4, not 11am
+            (should (= day 4))
+            (should (= hour 12))))
+      (if original-tz
+          (setenv "TZ" original-tz)
+        (setenv "TZ" nil))
+      (set-time-zone-rule original-tz))))
+
+(ert-deftest owh-test-dst-completion-counted-for-correct-date ()
+  "Test that completions near midnight are counted for the correct date.
+
+Bug scenario: User completes habit at 00:00 on Jan 26.
+Due to DST-induced anchor drift, the assessment for Jan 26 might start
+at 23:00 on Jan 25, causing the 00:00 completion to be counted for Jan 25.
+
+This test verifies that a completion logged at 00:00 on a given date
+is counted for that date's assessment, not the previous day's.
+
+Note: The anchor is at midnight because that's what org-window-habit-finalize-instance
+does when normalizing the start-time for daily habits."
+  (let ((original-tz (getenv "TZ")))
+    (unwind-protect
+        (progn
+          (setenv "TZ" "America/Los_Angeles")
+          (set-time-zone-rule "America/Los_Angeles")
+
+          (let* (;; Habit started in summer (PDT) - normalized to midnight
+                 ;; This simulates what org-window-habit-normalize-time-to-duration does
+                 (habit-start (encode-time 0 0 0 16 8 2023))  ; Aug 16, 2023 midnight
+                 ;; Completion at midnight on Jan 26, 2026 (PST - winter)
+                 (completion-time (encode-time 0 0 0 26 1 2026))
+                 ;; Reference time for computing assessment
+                 (reference-time (encode-time 0 0 12 26 1 2026))
+                 ;; Get assessment window for Jan 26
+                 (assessment-start
+                  (org-window-habit-get-anchored-assessment-start
+                   habit-start reference-time '(:days 1)))
+                 (assessment-end
+                  (org-window-habit-keyed-duration-add-plist
+                   assessment-start '(:days 1)))
+                 (decoded-start (decode-time assessment-start)))
+            ;; The assessment for Jan 26 should start on Jan 26, not Jan 25
+            (should (= (nth 3 decoded-start) 26))
+            ;; The completion at 00:00 Jan 26 should fall within the Jan 26 assessment
+            ;; i.e., completion-time >= assessment-start
+            (should (or (time-equal-p completion-time assessment-start)
+                        (time-less-p assessment-start completion-time)))
+            ;; And completion-time < assessment-end
+            (should (time-less-p completion-time assessment-end))))
+      (if original-tz
+          (setenv "TZ" original-tz)
+        (setenv "TZ" nil))
+      (set-time-zone-rule original-tz))))
+
 (provide 'org-window-habit-test)
 ;;; org-window-habit-test.el ends here
