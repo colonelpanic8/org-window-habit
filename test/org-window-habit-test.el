@@ -2545,5 +2545,125 @@ does when normalizing the start-time for daily habits."
         (setenv "TZ" nil))
       (set-time-zone-rule original-tz))))
 
+;;; Window Specs Status Tests
+
+(ert-deftest owh-test-get-window-specs-status-single-spec ()
+  "Test get-window-specs-status with a single window spec."
+  (let* ((habit-start (owh-test-make-time 2024 1 1 0 0 0))
+         ;; Create done times: 2 completions in the window
+         (done-times (vconcat (list (owh-test-make-time 2024 1 13 10 0 0)
+                                    (owh-test-make-time 2024 1 11 14 0 0))))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3
+                                                                  :value 1.0))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :start-time habit-start))
+         ;; Query from Jan 14
+         (query-time (owh-test-make-time 2024 1 14 12 0 0))
+         (result (org-window-habit-get-window-specs-status habit query-time)))
+    ;; Should have windowSpecsStatus and aggregatedConformingRatio keys
+    (should (assoc "windowSpecsStatus" result))
+    (should (assoc "aggregatedConformingRatio" result))
+    ;; Should have exactly one window spec status
+    (let ((specs-status (cdr (assoc "windowSpecsStatus" result))))
+      (should (= (length specs-status) 1))
+      ;; First spec should have all expected fields
+      (let ((first-spec (car specs-status)))
+        (should (assoc "conformingRatio" first-spec))
+        (should (assoc "completionsInWindow" first-spec))
+        (should (assoc "targetRepetitions" first-spec))
+        (should (assoc "duration" first-spec))
+        (should (assoc "windowStart" first-spec))
+        (should (assoc "windowEnd" first-spec))
+        ;; 2 completions out of 3 required = 2/3 ratio
+        (should (< (abs (- (cdr (assoc "conformingRatio" first-spec)) (/ 2.0 3.0))) 0.01))
+        (should (= (cdr (assoc "completionsInWindow" first-spec)) 2))
+        (should (= (cdr (assoc "targetRepetitions" first-spec)) 3))))))
+
+(ert-deftest owh-test-get-window-specs-status-multiple-specs ()
+  "Test get-window-specs-status with multiple window specs."
+  (let* ((habit-start (owh-test-make-time 2024 1 1 0 0 0))
+         ;; Create done times: completions spread across windows
+         (done-times (vconcat (list (owh-test-make-time 2024 1 13 10 0 0)
+                                    (owh-test-make-time 2024 1 12 14 0 0)
+                                    (owh-test-make-time 2024 1 10 9 0 0))))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list
+                                              ;; Short window: 3 days, need 1 completion
+                                              (make-instance 'org-window-habit-window-spec
+                                                             :duration '(:days 3)
+                                                             :repetitions 1
+                                                             :value 0.5)
+                                              ;; Long window: 7 days, need 2 completions
+                                              (make-instance 'org-window-habit-window-spec
+                                                             :duration '(:days 7)
+                                                             :repetitions 2
+                                                             :value 1.0))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :start-time habit-start))
+         ;; Query from Jan 14
+         (query-time (owh-test-make-time 2024 1 14 12 0 0))
+         (result (org-window-habit-get-window-specs-status habit query-time)))
+    ;; Should have exactly two window spec statuses
+    (let ((specs-status (cdr (assoc "windowSpecsStatus" result))))
+      (should (= (length specs-status) 2))
+      ;; First spec (3-day window): should have completions from Jan 12 and 13
+      (let ((first-spec (car specs-status)))
+        (should (= (cdr (assoc "targetRepetitions" first-spec)) 1)))
+      ;; Second spec (7-day window): should have all 3 completions
+      (let ((second-spec (cadr specs-status)))
+        (should (= (cdr (assoc "targetRepetitions" second-spec)) 2))))
+    ;; Aggregated ratio should be the minimum (default aggregation)
+    (let ((aggregated (cdr (assoc "aggregatedConformingRatio" result))))
+      (should (numberp aggregated)))))
+
+(ert-deftest owh-test-get-window-specs-status-no-completions ()
+  "Test get-window-specs-status with no completions."
+  (let* ((habit-start (owh-test-make-time 2024 1 1 0 0 0))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3
+                                                                  :value 1.0))
+                               :assessment-interval '(:days 1)
+                               :done-times (vector)
+                               :start-time habit-start))
+         (query-time (owh-test-make-time 2024 1 14 12 0 0))
+         (result (org-window-habit-get-window-specs-status habit query-time)))
+    (let* ((specs-status (cdr (assoc "windowSpecsStatus" result)))
+           (first-spec (car specs-status)))
+      ;; No completions means 0 conforming ratio
+      (should (= (cdr (assoc "conformingRatio" first-spec)) 0.0))
+      (should (= (cdr (assoc "completionsInWindow" first-spec)) 0)))))
+
+(ert-deftest owh-test-get-window-specs-status-fully-conforming ()
+  "Test get-window-specs-status when fully conforming."
+  (let* ((habit-start (owh-test-make-time 2024 1 1 0 0 0))
+         ;; 3 completions for a habit requiring 3
+         (done-times (vconcat (list (owh-test-make-time 2024 1 13 10 0 0)
+                                    (owh-test-make-time 2024 1 12 14 0 0)
+                                    (owh-test-make-time 2024 1 11 9 0 0))))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:days 7)
+                                                                  :repetitions 3
+                                                                  :value 1.0))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :start-time habit-start))
+         (query-time (owh-test-make-time 2024 1 14 12 0 0))
+         (result (org-window-habit-get-window-specs-status habit query-time)))
+    (let* ((specs-status (cdr (assoc "windowSpecsStatus" result)))
+           (first-spec (car specs-status))
+           (aggregated (cdr (assoc "aggregatedConformingRatio" result))))
+      ;; Fully conforming means ratio of 1.0
+      (should (= (cdr (assoc "conformingRatio" first-spec)) 1.0))
+      (should (= (cdr (assoc "completionsInWindow" first-spec)) 3))
+      (should (= aggregated 1.0)))))
+
 (provide 'org-window-habit-test)
 ;;; org-window-habit-test.el ends here

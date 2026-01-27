@@ -1139,6 +1139,40 @@ ARGS are passed to the conforming value computation."
                    collect (apply #'org-window-habit-get-conforming-value iterator args))))
     (or (funcall (oref habit aggregation-fn) conforming-values) 0.0)))
 
+(cl-defmethod org-window-habit-get-window-specs-status
+  ((habit org-window-habit) &optional time)
+  "Get conforming status for each window spec in HABIT at TIME.
+TIME defaults to current time.
+Returns an alist with:
+  - windowSpecsStatus: list of per-spec status with conformingRatio,
+    completionsInWindow, targetRepetitions, duration, and conformingValue
+  - aggregatedConformingRatio: the overall conforming ratio after aggregation"
+  (setq time (or time (current-time)))
+  (with-slots (window-specs aggregation-fn) habit
+    (let* ((iterators (cl-loop for spec in window-specs
+                               collect (org-window-habit-iterator-from-time spec time)))
+           (per-spec-data
+            (cl-loop for iterator in iterators
+                     for spec = (oref iterator window-spec)
+                     for window = (oref iterator window)
+                     for conforming-ratio = (org-window-habit-conforming-ratio iterator)
+                     for start-index = (oref iterator start-index)
+                     for end-index = (oref iterator end-index)
+                     for completions = (- end-index start-index)
+                     collect `(("conformingRatio" . ,conforming-ratio)
+                               ("completionsInWindow" . ,completions)
+                               ("targetRepetitions" . ,(oref spec target-repetitions))
+                               ("duration" . ,(oref spec duration-plist))
+                               ("conformingValue" . ,(oref spec conforming-value))
+                               ("windowStart" . ,(oref window start-time))
+                               ("windowEnd" . ,(oref window end-time)))))
+           (conforming-values
+            (cl-loop for iterator in iterators
+                     collect (org-window-habit-get-conforming-value iterator)))
+           (aggregated-ratio (or (funcall aggregation-fn conforming-values) 0.0)))
+      `(("windowSpecsStatus" . ,per-spec-data)
+        ("aggregatedConformingRatio" . ,aggregated-ratio)))))
+
 (cl-defmethod org-window-habit-assess-interval-with-and-without-completions
   ((habit org-window-habit) iterators modify-completions-fn)
   "Assess HABIT's current interval with and without completions.
