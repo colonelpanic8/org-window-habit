@@ -1380,14 +1380,14 @@ ORIG is the original function, ARGS are its arguments."
       org-default-priority              ;TODO fix this
     (apply orig args)))
 
-(defun org-window-habit-set-reset-time (time)
-  "Set the reset time for the habit at point to TIME.
-When called interactively, prompt for the time using org's date selector.
-This causes completions before TIME to be ignored when calculating conformity."
+(defun org-window-habit-set-reset-time (date)
+  "Set the reset date for the habit at point to DATE.
+When called interactively, prompt for the date using org's date selector.
+This causes completions before DATE to be ignored when calculating conformity."
   (interactive
-   (list (org-read-date t t nil "Reset time: ")))
+   (list (org-read-date nil t nil "Reset date: ")))
   (org-entry-put nil (org-window-habit-property "RESET_TIME")
-                 (format-time-string (org-time-stamp-format t t) time)))
+                 (format-time-string (org-time-stamp-format t nil) date)))
 
 (defun org-window-habit-clear-reset-time ()
   "Clear the reset time for the habit at point."
