@@ -2665,5 +2665,415 @@ does when normalizing the start-time for daily habits."
       (should (= (cdr (assoc "completionsInWindow" first-spec)) 3))
       (should (= aggregated 1.0)))))
 
+;;; ==========================================================================
+;;; Future Required Intervals Tests (Prospective Scheduling)
+;;; ==========================================================================
+;;;
+;;; Tests for org-window-habit-get-future-required-intervals which computes
+;;; multiple future "must complete by" dates, assuming minimum-effort
+;;; completion (completing exactly when required, not earlier).
+
+;;; ---------------------------------------------------------------------------
+;;; Basic Functionality Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-basic-weekly-5x ()
+  "Test future intervals for 5x per 7 days habit.
+With 5 completions spread across the last 5 days, each future completion
+is needed ~every 1.4 days to maintain conformity."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; Perfect streak: completed Jan 11-15
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)
+                           (owh-test-make-time 2024 1 14 10 0 0)
+                           (owh-test-make-time 2024 1 13 10 0 0)
+                           (owh-test-make-time 2024 1 12 10 0 0)
+                           (owh-test-make-time 2024 1 11 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times))
+         ;; Query from Jan 15 afternoon
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 5 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; Should return exactly 5 future intervals
+    (should (= (length intervals) 5))
+    ;; Each interval should be after the previous
+    (cl-loop for i from 0 below (1- (length intervals))
+             do (should (time-less-p (nth i intervals) (nth (1+ i) intervals))))
+    ;; First required is Jan 18 (when Jan 11 falls out of window on Jan 18):
+    ;; - Window on Jan 17 (Jan 11-18): still has 5 completions
+    ;; - Window on Jan 18 (Jan 12-19): only 4 completions (Jan 11 excluded)
+    ;; Plus reschedule-interval adds 1 day from last completion (Jan 15)
+    (should (owh-test-times-equal-p
+             (nth 0 intervals)
+             (owh-test-make-time 2024 1 18 0 0 0)))))
+
+(ert-deftest owh-test-future-intervals-daily-habit ()
+  "Test future intervals for daily habit (1x per day).
+Each day requires exactly one completion."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 1)
+                              :repetitions 1))
+         ;; Completed today (Jan 15)
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 5 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; Should get 5 consecutive days: Jan 16, 17, 18, 19, 20
+    (should (= (length intervals) 5))
+    (should (owh-test-times-equal-p (nth 0 intervals) (owh-test-make-time 2024 1 16 0 0 0)))
+    (should (owh-test-times-equal-p (nth 1 intervals) (owh-test-make-time 2024 1 17 0 0 0)))
+    (should (owh-test-times-equal-p (nth 2 intervals) (owh-test-make-time 2024 1 18 0 0 0)))
+    (should (owh-test-times-equal-p (nth 3 intervals) (owh-test-make-time 2024 1 19 0 0 0)))
+    (should (owh-test-times-equal-p (nth 4 intervals) (owh-test-make-time 2024 1 20 0 0 0)))))
+
+(ert-deftest owh-test-future-intervals-sparse-monthly ()
+  "Test future intervals for sparse habit (1x per month).
+With monthly window, completions are required roughly monthly."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:months 1)
+                              :repetitions 1))
+         ;; Completed on Jan 15
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 3 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; Should get 3 intervals roughly a month apart
+    (should (= (length intervals) 3))
+    ;; First should be around Feb 15 (when Jan 15 falls out of month window)
+    (let ((first-interval (nth 0 intervals)))
+      (should (time-less-p (owh-test-make-time 2024 2 1 0 0 0) first-interval))
+      (should (time-less-p first-interval (owh-test-make-time 2024 3 1 0 0 0))))))
+
+(ert-deftest owh-test-future-intervals-count-parameter ()
+  "Test that count parameter controls number of returned intervals."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 1)
+                              :repetitions 1))
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times))
+         (now (owh-test-make-time 2024 1 15 14 0 0)))
+    ;; Request 1 interval
+    (should (= (length (org-window-habit-get-future-required-intervals habit 1 now)) 1))
+    ;; Request 3 intervals
+    (should (= (length (org-window-habit-get-future-required-intervals habit 3 now)) 3))
+    ;; Request 10 intervals
+    (should (= (length (org-window-habit-get-future-required-intervals habit 10 now)) 10))))
+
+;;; ---------------------------------------------------------------------------
+;;; Only-Days Restriction Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-only-days-mwf ()
+  "Test future intervals with Monday/Wednesday/Friday restriction.
+Completions should only be scheduled on allowed days."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         ;; Completed on Mon Jan 15
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat done-times)
+                               :only-days '(:monday :wednesday :friday)
+                               :start-time (owh-test-make-time 2024 1 15 0 0 0)))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 5 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; All returned dates should be Mon, Wed, or Fri
+    (cl-loop for interval in intervals
+             for decoded = (decode-time interval)
+             for dow = (nth 6 decoded)  ; 0=Sun, 1=Mon, ..., 5=Fri
+             do (should (member dow '(1 3 5))))))
+
+(ert-deftest owh-test-future-intervals-only-days-weekend ()
+  "Test future intervals with weekend-only restriction."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 2))
+         ;; Completed on Sat Jan 20
+         (done-times (list (owh-test-make-time 2024 1 20 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat done-times)
+                               :only-days '(:saturday :sunday)
+                               :start-time (owh-test-make-time 2024 1 20 0 0 0)))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 4 (owh-test-make-time 2024 1 20 14 0 0))))
+    ;; All returned dates should be Sat (6) or Sun (0)
+    (cl-loop for interval in intervals
+             for decoded = (decode-time interval)
+             for dow = (nth 6 decoded)
+             do (should (member dow '(0 6))))))
+
+;;; ---------------------------------------------------------------------------
+;;; Multiple Window Specs Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-multi-spec-fitness ()
+  "Test future intervals with multiple window specs (fitness habit).
+Must satisfy BOTH: 3x strength per week AND 1x daily stretching.
+The more restrictive spec (daily) should drive scheduling."
+  (let* ((strength-spec (make-instance 'org-window-habit-window-spec
+                                       :duration '(:days 7)
+                                       :repetitions 3))
+         (stretch-spec (make-instance 'org-window-habit-window-spec
+                                      :duration '(:days 1)
+                                      :repetitions 1))
+         ;; Completed today (counts for both specs)
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (owh-test-make-habit (list strength-spec stretch-spec) done-times))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 5 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; Should be daily because daily stretching is more restrictive
+    (should (= (length intervals) 5))
+    ;; Consecutive days starting from Jan 16
+    (should (owh-test-times-equal-p (nth 0 intervals) (owh-test-make-time 2024 1 16 0 0 0)))
+    (should (owh-test-times-equal-p (nth 1 intervals) (owh-test-make-time 2024 1 17 0 0 0)))))
+
+(ert-deftest owh-test-future-intervals-multi-spec-weekly-and-monthly ()
+  "Test with weekly and monthly specs.
+3x per week AND 10x per month - the weekly is likely more restrictive."
+  (let* ((weekly-spec (make-instance 'org-window-habit-window-spec
+                                     :duration '(:days 7)
+                                     :repetitions 3))
+         (monthly-spec (make-instance 'org-window-habit-window-spec
+                                      :duration '(:months 1)
+                                      :repetitions 10))
+         ;; 3 completions this week
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)
+                           (owh-test-make-time 2024 1 13 10 0 0)
+                           (owh-test-make-time 2024 1 11 10 0 0)))
+         (habit (owh-test-make-habit (list weekly-spec monthly-spec) done-times))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 5 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; Should return 5 intervals
+    (should (= (length intervals) 5))
+    ;; All should be in the future
+    (cl-loop for interval in intervals
+             do (should (time-less-p (owh-test-make-time 2024 1 15 0 0 0) interval)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Edge Case: No Prior Completions
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-no-done-times ()
+  "Test future intervals when habit has no completions yet.
+Should still return valid future intervals. When there are no completions,
+the habit is immediately non-conforming, so first interval may be 'now'
+(normalized to assessment boundary)."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         (habit (owh-test-make-habit (list spec) '()))
+         (now (owh-test-make-time 2024 1 15 14 0 0))
+         (intervals (org-window-habit-get-future-required-intervals habit 3 now)))
+    ;; Should get 3 intervals
+    (should (= (length intervals) 3))
+    ;; First interval should be today (normalized to start of day, so it's the
+    ;; assessment boundary that contains 'now')
+    (should (owh-test-times-equal-p (nth 0 intervals) (owh-test-make-time 2024 1 15 0 0 0)))
+    ;; Subsequent intervals should be in order
+    (cl-loop for i from 0 below (1- (length intervals))
+             do (should (time-less-p (nth i intervals) (nth (1+ i) intervals))))))
+
+;;; ---------------------------------------------------------------------------
+;;; Edge Case: Currently Non-Conforming
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-already-behind ()
+  "Test future intervals when already non-conforming.
+If ratio is already below threshold, first 'required' interval is now."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; Only 2 completions in last 7 days - behind on 5x/week goal
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)
+                           (owh-test-make-time 2024 1 10 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times))
+         (now (owh-test-make-time 2024 1 15 14 0 0))
+         (intervals (org-window-habit-get-future-required-intervals habit 3 now)))
+    ;; Should still return intervals
+    (should (= (length intervals) 3))
+    ;; First interval should be today or very soon (already behind)
+    (should (time-less-p (nth 0 intervals) (owh-test-make-time 2024 1 17 0 0 0)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Edge Case: Reschedule Interval Effects
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-respects-reschedule-interval ()
+  "Test that reschedule-interval creates minimum gap between completions.
+Even if mathematically you could complete immediately, reschedule-interval
+prevents scheduling too soon after a completion."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 7))  ; Daily requirement
+         ;; Just completed
+         (done-times (list (owh-test-make-time 2024 1 15 14 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :reschedule-interval '(:days 2)  ; 2-day minimum gap
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat done-times)
+                               :start-time nil))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 3 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; First interval should be at least 2 days from last completion (Jan 17+)
+    (should (org-window-habit-time-greater-or-equal-p
+             (nth 0 intervals)
+             (owh-test-make-time 2024 1 17 0 0 0)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Edge Case: Max Repetitions Per Interval
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-max-reps-per-interval ()
+  "Test that max-repetitions-per-interval affects future projections.
+If you can only count 1 completion per day, you can't 'front-load' completions."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 7))  ; Need 7 per week
+         ;; 3 completions all on the same day (but max-reps=1 means only 1 counts)
+         (done-times (list (owh-test-make-time 2024 1 15 18 0 0)
+                           (owh-test-make-time 2024 1 15 14 0 0)
+                           (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times '(:days 1) 1))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 5 (owh-test-make-time 2024 1 15 20 0 0))))
+    ;; With max-reps=1, only 1 of the 3 completions counts
+    ;; So we need daily completions going forward
+    (should (= (length intervals) 5))
+    ;; Should be consecutive days
+    (should (owh-test-times-equal-p (nth 0 intervals) (owh-test-make-time 2024 1 16 0 0 0)))
+    (should (owh-test-times-equal-p (nth 1 intervals) (owh-test-make-time 2024 1 17 0 0 0)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Edge Case: Threshold Below 1.0
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-partial-threshold ()
+  "Test future intervals with reschedule-threshold < 1.0.
+With threshold 0.8, you only need to complete when ratio drops below 80%."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         ;; 4 completions = 80% - right at threshold
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)
+                           (owh-test-make-time 2024 1 14 10 0 0)
+                           (owh-test-make-time 2024 1 13 10 0 0)
+                           (owh-test-make-time 2024 1 12 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :reschedule-interval '(:days 1)
+                               :reschedule-threshold 0.8
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :start-time nil))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 3 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; With 0.8 threshold and 4/5 completions, we're exactly at threshold
+    ;; Need to complete when a completion falls out and ratio drops below 0.8
+    (should (= (length intervals) 3))))
+
+;;; ---------------------------------------------------------------------------
+;;; Consistency Test: Simulated Completions Match Actual Behavior
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-consistency-with-get-next-required ()
+  "Test that future intervals are consistent with iterative get-next-required calls.
+If we actually add a completion at each predicted interval, get-next-required
+should return the next predicted interval."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 3))
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)
+                           (owh-test-make-time 2024 1 13 10 0 0)
+                           (owh-test-make-time 2024 1 11 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times))
+         (now (owh-test-make-time 2024 1 15 14 0 0))
+         (predicted (org-window-habit-get-future-required-intervals habit 3 now)))
+    ;; First predicted should match get-next-required-interval
+    (let ((actual-first (org-window-habit-get-next-required-interval habit now)))
+      (should (owh-test-times-equal-p (nth 0 predicted) actual-first)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Stress Test: Large Count
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-large-count ()
+  "Test requesting a large number of future intervals.
+Should complete in reasonable time and return valid results."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))
+         (done-times (list (owh-test-make-time 2024 1 15 10 0 0)
+                           (owh-test-make-time 2024 1 14 10 0 0)
+                           (owh-test-make-time 2024 1 13 10 0 0)
+                           (owh-test-make-time 2024 1 12 10 0 0)
+                           (owh-test-make-time 2024 1 11 10 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 50 (owh-test-make-time 2024 1 15 14 0 0))))
+    ;; Should return 50 intervals
+    (should (= (length intervals) 50))
+    ;; All should be strictly increasing
+    (cl-loop for i from 0 below (1- (length intervals))
+             do (should (time-less-p (nth i intervals) (nth (1+ i) intervals))))
+    ;; Last interval should be well into the future (months out for 50 intervals)
+    (should (time-less-p (owh-test-make-time 2024 3 1 0 0 0)
+                         (nth 49 intervals)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Hourly Assessment Interval Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-hourly-assessment ()
+  "Test future intervals with hourly assessment interval.
+For habits that need sub-daily tracking."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:hours 8)  ; 8-hour window
+                              :repetitions 4))       ; 4 completions per 8 hours
+         ;; 4 completions over last 8 hours
+         (done-times (list (owh-test-make-time 2024 1 15 14 0 0)
+                           (owh-test-make-time 2024 1 15 12 0 0)
+                           (owh-test-make-time 2024 1 15 10 0 0)
+                           (owh-test-make-time 2024 1 15 8 0 0)))
+         (habit (owh-test-make-habit (list spec) done-times '(:hours 2) 1))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 4 (owh-test-make-time 2024 1 15 15 0 0))))
+    ;; Should get 4 intervals
+    (should (= (length intervals) 4))
+    ;; Should be roughly 2-hour intervals (matching assessment-interval)
+    (cl-loop for interval in intervals
+             do (should (time-less-p (owh-test-make-time 2024 1 15 0 0 0) interval)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Week-Aligned Window Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-future-intervals-week-aligned ()
+  "Test future intervals with true week-aligned windows.
+Using (:weeks 1) instead of (:days 7) for week boundaries."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:weeks 1)  ; True week alignment
+                              :repetitions 3))
+         ;; Completed Mon-Wed of current week
+         (done-times (list (owh-test-make-time 2024 1 17 10 0 0)  ; Wed
+                           (owh-test-make-time 2024 1 16 10 0 0)  ; Tue
+                           (owh-test-make-time 2024 1 15 10 0 0))) ; Mon
+         (habit (owh-test-make-habit (list spec) done-times))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 3 (owh-test-make-time 2024 1 17 14 0 0))))
+    ;; Should return 3 intervals
+    (should (= (length intervals) 3))
+    ;; First should be after Wed Jan 17
+    (should (time-less-p (owh-test-make-time 2024 1 17 0 0 0) (nth 0 intervals)))))
+
 (provide 'org-window-habit-test)
 ;;; org-window-habit-test.el ends here

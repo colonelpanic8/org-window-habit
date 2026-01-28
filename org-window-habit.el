@@ -1130,6 +1130,62 @@ reschedule-threshold.  Respects only-days restrictions."
       ;; Snap to next allowed day if only-days is set
       (org-window-habit-next-allowed-day raw-result only-days))))
 
+(cl-defmethod org-window-habit-get-future-required-intervals
+  ((habit org-window-habit) count &optional now)
+  "Compute COUNT future required intervals for HABIT starting from NOW.
+Returns a list of times representing when completions will be required,
+assuming minimum-effort completion (completing exactly when required).
+
+Each interval is computed by:
+1. Finding when the habit would fall out of conformity
+2. Simulating a completion at that time
+3. Finding the next required time with the simulated completion
+4. Repeating COUNT times
+
+This enables prospective planning: showing future \"must complete by\" dates
+assuming you complete at the last possible moment each time."
+  (setq now (or now (current-time)))
+  (with-slots (window-specs assessment-interval reschedule-interval
+                            reschedule-threshold max-repetitions-per-interval
+                            aggregation-fn only-days start-time)
+      habit
+    (let ((result '())
+          ;; Copy done-times to a list we can extend with simulated completions
+          (simulated-done-times (append (oref habit done-times) nil)))
+      (cl-loop
+       repeat count
+       do
+       ;; Create deep copies of window-specs to avoid mutation of original habit
+       ;; (initialize-instance sets the habit back-reference on each spec)
+       (let* ((copied-specs
+               (cl-loop for spec in window-specs
+                        collect (make-instance 'org-window-habit-window-spec
+                                               :duration (oref spec duration-plist)
+                                               :repetitions (oref spec target-repetitions)
+                                               :value (oref spec conforming-value)
+                                               :find-window (oref spec find-window))))
+              (temp-habit (make-instance 'org-window-habit
+                                         :window-specs copied-specs
+                                         :assessment-interval assessment-interval
+                                         :reschedule-interval reschedule-interval
+                                         :reschedule-threshold reschedule-threshold
+                                         :max-repetitions-per-interval max-repetitions-per-interval
+                                         :aggregation-fn aggregation-fn
+                                         :only-days only-days
+                                         :done-times (vconcat
+                                                      (sort (copy-sequence simulated-done-times)
+                                                            (lambda (a b) (time-less-p b a))))
+                                         :start-time start-time))
+              (next-required (org-window-habit-get-next-required-interval temp-habit now)))
+         ;; Add to results
+         (push next-required result)
+         ;; Simulate completion at this time for next iteration
+         (push next-required simulated-done-times)
+         ;; Update now to be after the simulated completion
+         (setq now next-required)))
+      ;; Return in chronological order
+      (nreverse result))))
+
 (cl-defmethod org-window-habit-assess-interval
   ((habit org-window-habit) iterators &rest args)
   "Compute aggregate conforming value for HABIT using ITERATORS.
