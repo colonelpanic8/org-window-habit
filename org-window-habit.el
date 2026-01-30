@@ -397,9 +397,9 @@ Returns a new list with resolved dates."
 
 (defun org-window-habit-get-config-for-time (configs time)
   "Return the active config from CONFIGS for the given TIME.
-CONFIGS is a list of parsed config plists (from `org-window-habit-parse-config').
-Returns the matching config plist, or nil if TIME falls in a gap or before
-the habit's start.
+CONFIGS is a list of parsed config plists from
+`org-window-habit-parse-config'.  Returns the matching config
+plist, or nil if TIME falls in a gap or before the habit's start.
 
 Boundary semantics: inclusive start, exclusive end.
 A time exactly at a config's :from belongs to that config."

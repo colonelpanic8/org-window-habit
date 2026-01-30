@@ -3456,21 +3456,23 @@ Using (:weeks 1) instead of (:days 7) for week boundaries."
                                         (owh-test-make-time 2024 6 1 0 0 0)))))))
 
 (ert-deftest owh-test-migrate-habit-with-window-specs ()
-  "Test migrating habit with WINDOW_SPECS property."
+  "Test migrating habit with WINDOW_SPECS property preserves all properties."
   (let ((org-window-habit-property-prefix nil))
     (with-temp-buffer
       (org-mode)
       (insert "* TODO Test habit\n")
       (insert ":PROPERTIES:\n")
       (insert ":WINDOW_SPECS: ((:duration (:days 7) :repetitions 3) (:duration (:days 30) :repetitions 10))\n")
-      (insert ":ASSESSMENT_INTERVAL: (:days 1)\n")
+      (insert ":ASSESSMENT_INTERVAL: (:days 2)\n")
       (insert ":END:\n")
       (goto-char (point-min))
       (org-window-habit-migrate-to-config)
       (let ((configs (org-window-habit-parse-config (org-entry-get nil "CONFIG"))))
         (should (= (length configs) 1))
         ;; Should preserve multiple window specs
-        (should (= (length (plist-get (car configs) :window-specs)) 2))))))
+        (should (= (length (plist-get (car configs) :window-specs)) 2))
+        ;; Should preserve assessment-interval
+        (should (equal (plist-get (car configs) :assessment-interval) '(:days 2)))))))
 
 (ert-deftest owh-test-migrate-habit-with-all-properties ()
   "Test migrating habit with all optional properties."
