@@ -45,6 +45,25 @@
   (should (equal (org-window-habit-multiply-plist '(:days 1 :hours 2) 3)
                  '(:days 3 :hours 6))))
 
+(ert-deftest owh-test-negate-plist-with-start ()
+  "Test negating duration plists that include :start alignment.
+Plists like (:weeks 1 :start :monday) should preserve the :start key
+while negating the numeric values."
+  (should (equal (org-window-habit-negate-plist '(:weeks 1 :start :monday))
+                 '(:weeks -1 :start :monday)))
+  (should (equal (org-window-habit-negate-plist '(:weeks 2 :start :sunday))
+                 '(:weeks -2 :start :sunday)))
+  (should (equal (org-window-habit-negate-plist '(:weeks 1 :start :friday))
+                 '(:weeks -1 :start :friday))))
+
+(ert-deftest owh-test-multiply-plist-with-start ()
+  "Test multiplying duration plists that include :start alignment.
+The :start value (a symbol like :monday) should be preserved unchanged."
+  (should (equal (org-window-habit-multiply-plist '(:weeks 1 :start :monday) 2)
+                 '(:weeks 2 :start :monday)))
+  (should (equal (org-window-habit-multiply-plist '(:weeks 1 :start :sunday) 3)
+                 '(:weeks 3 :start :sunday))))
+
 (ert-deftest owh-test-duration-proportion ()
   "Test calculating duration proportions."
   (let* ((start (owh-test-make-time 2024 1 1 0 0 0))
@@ -438,6 +457,62 @@ boundaries even when queried at the same time."
     (should-not (owh-test-times-equal-p
                  (oref window-a assessment-start-time)
                  (oref window-b assessment-start-time)))))
+
+(ert-deftest owh-test-week-aligned-assessment-interval ()
+  "Test habits with week-aligned assessment intervals.
+When assessment-interval is (:weeks 1 :start :monday), the habit should
+correctly create assessment windows aligned to Monday boundaries.
+This tests the fix for the 'number-or-marker-p :monday' error that
+occurred when negate-plist was called on plists containing :start."
+  (let* ((habit-start (owh-test-make-time 2024 1 15 0 0 0))  ; Monday
+         (done-times (vector
+                      (owh-test-make-time 2024 1 17 10 0 0)   ; Wed
+                      (owh-test-make-time 2024 1 16 10 0 0))) ; Tue
+         ;; This should NOT error with "Wrong type argument: number-or-marker-p, :monday"
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:weeks 1 :start :monday)
+                                                                  :repetitions 3))
+                               :assessment-interval '(:weeks 1 :start :monday)
+                               :done-times done-times
+                               :start-time habit-start))
+         (window-spec (car (oref habit window-specs))))
+    ;; Query from Wednesday Jan 17 - should be in the week of Jan 15-22
+    (let ((window (org-window-habit-get-assessment-window
+                   window-spec (owh-test-make-time 2024 1 17 12 0 0))))
+      ;; Assessment should start on Monday Jan 15
+      (should (owh-test-times-equal-p
+               (oref window assessment-start-time)
+               (owh-test-make-time 2024 1 15 0 0 0)))
+      ;; Assessment should end on Monday Jan 22
+      (should (owh-test-times-equal-p
+               (oref window assessment-end-time)
+               (owh-test-make-time 2024 1 22 0 0 0))))))
+
+(ert-deftest owh-test-sunday-aligned-assessment-interval ()
+  "Test habits with Sunday-aligned assessment intervals.
+Similar to the Monday-aligned test but with :start :sunday."
+  (let* ((habit-start (owh-test-make-time 2024 1 14 0 0 0))  ; Sunday
+         (done-times (vector (owh-test-make-time 2024 1 16 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list (make-instance 'org-window-habit-window-spec
+                                                                  :duration '(:weeks 1 :start :sunday)
+                                                                  :repetitions 2))
+                               :assessment-interval '(:weeks 1 :start :sunday)
+                               :done-times done-times
+                               :start-time habit-start))
+         (window-spec (car (oref habit window-specs))))
+    ;; Query from Wednesday Jan 17 - should be in the week of Sun Jan 14 to Sun Jan 21
+    (let ((window (org-window-habit-get-assessment-window
+                   window-spec (owh-test-make-time 2024 1 17 12 0 0))))
+      ;; Assessment should start on Sunday Jan 14
+      (should (owh-test-times-equal-p
+               (oref window assessment-start-time)
+               (owh-test-make-time 2024 1 14 0 0 0)))
+      ;; Assessment should end on Sunday Jan 21
+      (should (owh-test-times-equal-p
+               (oref window assessment-end-time)
+               (owh-test-make-time 2024 1 21 0 0 0))))))
 
 ;;; Reset Time and Anchoring Interaction Tests
 

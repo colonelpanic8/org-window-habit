@@ -182,10 +182,11 @@ Used to create a decrement plist for iterating backwards through time."
 
 (defun org-window-habit-multiply-plist (plist factor)
   "Multiply all numeric values in duration PLIST by FACTOR.
-For example, (:days 2 :hours 3) with FACTOR 2 becomes (:days 4 :hours 6)."
+For example, (:days 2 :hours 3) with FACTOR 2 becomes (:days 4 :hours 6).
+Non-numeric values (like :monday in (:weeks 1 :start :monday)) are preserved."
   (cl-loop for v in plist
            for index from 0
-           collect (if (eq (mod index 2) 1)
+           collect (if (and (eq (mod index 2) 1) (numberp v))
                        (* factor v)
                      v)))
 
