@@ -152,11 +152,13 @@ returns \"OWH_WINDOW_DURATION\"."
 (defun org-window-habit-entry-p ()
   "Return non-nil if entry at point is an org-window-habit.
 An entry is considered a window habit if it has either:
+- The CONFIG property (unified versioned format), or
 - The WINDOW_SPECS property (new format), or
 - The WINDOW_DURATION property (simple format)
 Property names respect `org-window-habit-property-prefix'."
   (and (org-entry-get nil "TODO")
-       (or (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)
+       (or (org-entry-get nil (org-window-habit-property "CONFIG") t)
+           (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)
            (org-entry-get nil (org-window-habit-property "WINDOW_DURATION") t))))
 
 (defun org-window-habit-time-to-string (time)
@@ -264,6 +266,176 @@ Supports formats like \"1w\", \"2d\", \"3h\", \"1m\", \"1y\" or plists."
        ((string-match "\\([0-9]+\\)[Hh]" string-value)
         (list :hours (string-to-number (match-string 1 string-value))))
        (t (list :days read-value))))))
+
+(defun org-window-habit-parse-config-date (date-value)
+  "Parse DATE-VALUE into an Emacs time value.
+DATE-VALUE can be:
+- An org inactive timestamp: [2025-06-01] or [2025-06-01 Sun]
+- An org active timestamp: <2025-06-01>
+- A plain date string: \"2025-06-01\"
+- nil (returns nil)
+Returns a normalized Emacs time value at midnight."
+  (when date-value
+    (let* ((date-str
+            (cond
+             ;; Strip org timestamp brackets [...]
+             ((string-match "^\\[\\([0-9]+-[0-9]+-[0-9]+\\)\\( [A-Za-z]+\\)?\\]$" date-value)
+              (match-string 1 date-value))
+             ;; Strip org active timestamp brackets <...>
+             ((string-match "^<\\([0-9]+-[0-9]+-[0-9]+\\)\\( [A-Za-z]+\\)?>$" date-value)
+              (match-string 1 date-value))
+             ;; Plain date string
+             ((string-match "^[0-9]+-[0-9]+-[0-9]+$" date-value)
+              date-value)
+             (t (error "Invalid date format: %s" date-value))))
+           (parsed (parse-time-string date-str)))
+      ;; parse-time-string returns (SEC MIN HOUR DAY MON YEAR DOW DST TZ)
+      ;; Build a time at midnight
+      (encode-time 0 0 0
+                   (nth 3 parsed)   ; day
+                   (nth 4 parsed)   ; month
+                   (nth 5 parsed))))) ; year
+
+(defun org-window-habit-config-is-versioned-p (config-data)
+  "Return non-nil if CONFIG-DATA is a versioned config (list of plists).
+A single config is a bare plist starting with a keyword.
+A versioned config is a list of plists (list starting with a list)."
+  (and (listp config-data)
+       (listp (car config-data))
+       ;; First element is a list, not a keyword (which would indicate single plist)
+       (not (keywordp (car config-data)))))
+
+(defun org-window-habit-parse-config (config-str)
+  "Parse CONFIG-STR into a list of normalized config plists.
+CONFIG-STR can be:
+- A single config plist (bare plist)
+- A versioned config (list of plists in reverse temporal order)
+
+Returns a list of config plists with resolved :from and :until dates.
+The first config in the list is the current (most recent) config.
+
+Temporal chaining rules:
+- Configs are in reverse temporal order (most recent first)
+- First config: :until is implicitly nil (unbounded future)
+- Each config's :from is implicitly the :until of the next config
+- Explicit :from that differs from previous :until creates a gap
+- Explicit :from on the last config acts like RESET_TIME"
+  (let* ((config-data (car (read-from-string config-str)))
+         (configs (if (org-window-habit-config-is-versioned-p config-data)
+                      config-data
+                    ;; Single config - wrap in list
+                    (list config-data))))
+    ;; Validate all configs have :window-specs
+    (dolist (config configs)
+      (unless (plist-get config :window-specs)
+        (error "Config missing required :window-specs: %S" config)))
+    ;; Process and chain configs
+    (org-window-habit-chain-config-dates configs)))
+
+(defun org-window-habit-chain-config-dates (configs)
+  "Chain implicit :from/:until dates in CONFIGS.
+CONFIGS is a list of config plists in reverse temporal order.
+Returns a new list with resolved dates."
+  (let ((result '()))
+    ;; First pass: parse all dates and validate
+    (setq result
+          (cl-loop for config in configs
+                   for explicit-from = (plist-get config :from)
+                   for explicit-until = (plist-get config :until)
+                   for parsed-from = (when explicit-from
+                                       (if (stringp explicit-from)
+                                           (org-window-habit-parse-config-date explicit-from)
+                                         explicit-from))
+                   for parsed-until = (when explicit-until
+                                        (if (stringp explicit-until)
+                                            (org-window-habit-parse-config-date explicit-until)
+                                          explicit-until))
+                   for new-config = (copy-sequence config)
+                   do (setq new-config (plist-put new-config :from parsed-from))
+                   do (setq new-config (plist-put new-config :until parsed-until))
+                   collect new-config))
+    ;; Validate temporal order: configs should be in reverse temporal order
+    ;; (most recent first), so :until values should be decreasing
+    (cl-loop for i from 0 below (1- (length result))
+             for current = (nth i result)
+             for next = (nth (1+ i) result)
+             for current-until = (plist-get current :until)
+             for next-until = (plist-get next :until)
+             ;; If current config has no :until (unbounded future) but next has one,
+             ;; that's correct order
+             ;; If both have :until, current's should be >= next's (or equal)
+             when (and current-until next-until
+                       (time-less-p current-until next-until))
+             do (error "Configs must be in reverse temporal order (most recent first)"))
+    ;; Also validate: first config should NOT have :until (it's current/unbounded)
+    ;; unless it's explicitly a bounded historical config
+    (let ((first (car result)))
+      (when (and (plist-get first :until)
+                 (null (plist-get first :from))
+                 (> (length result) 1))
+        ;; First config has :until but no :from, and there are more configs
+        ;; This means the "current" config has an end date, which is wrong order
+        (error "Configs must be in reverse temporal order (most recent first)")))
+    ;; Chain implicit :from values (each config's :from = next config's :until)
+    ;; BUT only if the next config doesn't have an explicit :from that creates a gap
+    (cl-loop for i from 0 below (length result)
+             for config = (nth i result)
+             for next-config = (when (< (1+ i) (length result))
+                                 (nth (1+ i) result))
+             ;; If this config doesn't have explicit :from, AND next config has :until,
+             ;; AND next config does NOT have an explicit :from (which would indicate a gap)
+             ;; then chain the :from
+             when (and (null (plist-get config :from))
+                       next-config
+                       (plist-get next-config :until)
+                       ;; Only chain if next config's range is unbounded at start
+                       ;; (no explicit :from means continuous from before)
+                       (null (plist-get next-config :from)))
+             do (setf (nth i result)
+                      (plist-put config :from (plist-get next-config :until))))
+    result))
+
+(defun org-window-habit-get-config-for-time (configs time)
+  "Return the active config from CONFIGS for the given TIME.
+CONFIGS is a list of parsed config plists (from `org-window-habit-parse-config').
+Returns the matching config plist, or nil if TIME falls in a gap or before
+the habit's start.
+
+Boundary semantics: inclusive start, exclusive end.
+A time exactly at a config's :from belongs to that config."
+  (cl-loop for config in configs
+           for config-from = (plist-get config :from)
+           for config-until = (plist-get config :until)
+           ;; Check if TIME is within this config's range
+           ;; Range is [from, until) - inclusive start, exclusive end
+           when (and
+                 ;; TIME >= :from (or :from is nil meaning unbounded past)
+                 (or (null config-from)
+                     (org-window-habit-time-greater-or-equal-p time config-from))
+                 ;; TIME < :until (or :until is nil meaning unbounded future)
+                 (or (null config-until)
+                     (time-less-p time config-until)))
+           return config))
+
+(defun org-window-habit-config-get-assessment-interval (config)
+  "Get assessment-interval from CONFIG, defaulting to (:days 1) if not set."
+  (or (plist-get config :assessment-interval)
+      '(:days 1)))
+
+(defun org-window-habit-config-get-max-reps-per-interval (config)
+  "Get max-reps-per-interval from CONFIG, defaulting to 1 if not set."
+  (or (plist-get config :max-reps-per-interval) 1))
+
+(defun org-window-habit-config-get-reschedule-threshold (config)
+  "Get reschedule-threshold from CONFIG, defaulting to 1.0 if not set."
+  (or (plist-get config :reschedule-threshold) 1.0))
+
+(defun org-window-habit-configs-get-effective-start (configs)
+  "Get the effective start time from CONFIGS.
+This is the :from of the oldest config (last in the list).
+Returns nil if the oldest config has no :from (unbounded past)."
+  (when configs
+    (plist-get (car (last configs)) :from)))
 
 (defun org-window-habit-day-of-week-number (day-symbol)
   "Convert DAY-SYMBOL to a number (0=Sunday, 1=Monday, ..., 6=Saturday)."
@@ -576,7 +748,12 @@ Example: (:monday :wednesday :friday). Nil means all days allowed.")
    (start-time
     :initarg :start-time :initform nil
     :documentation "Anchor time for assessment interval boundaries.
-Computed from earliest completion or reset-time if not specified."))
+Computed from earliest completion or reset-time if not specified.")
+   (configs
+    :initarg :configs :initform nil
+    :documentation "List of parsed versioned config plists with resolved dates.
+Each config plist contains :window-specs, :from, :until, and other habit parameters.
+Used for habits with evolving requirements over time."))
   "A window-based habit with configurable evaluation windows and conformity tracking.")
 
 (defclass org-window-habit-window-spec ()
@@ -623,6 +800,15 @@ Validates required properties and sets up defaults."
   (cl-loop for window-spec in (oref habit window-specs)
            do (oset window-spec habit habit)))
 
+(cl-defmethod org-window-habit-get-effective-start ((habit org-window-habit))
+  "Get the effective start time for HABIT.
+If HABIT has versioned configs, returns the :from of the oldest config.
+Otherwise returns the reset-time slot value.
+Returns nil if there's no effective start (unbounded past)."
+  (if (oref habit configs)
+      (org-window-habit-configs-get-effective-start (oref habit configs))
+    (oref habit reset-time)))
+
 (defclass org-window-habit-assessment-window ()
   ((assessment-start-time
     :initarg :assessment-start-time
@@ -668,43 +854,135 @@ STR should be a Lisp list like (:monday :wednesday :friday)."
     (car (read-from-string str))))
 
 (defun org-window-habit-create-instance-from-heading-at-point ()
-  "Construct an `org-window-habit' instance from the current org entry."
+  "Construct an `org-window-habit' instance from the current org entry.
+Checks for CONFIG property first (unified format), then falls back to
+scattered properties (WINDOW_DURATION, WINDOW_SPECS, etc.) for backwards
+compatibility."
   (save-excursion
     (let* ((done-times
             (cl-loop for state-change-info in (org-window-habit-parse-logbook)
                      if (member (nth 0 state-change-info) org-done-keywords)
                      collect (nth 2 state-change-info)))
            (done-times-vector (vconcat done-times))
-           (assessment-interval
-            (org-window-habit-string-duration-to-plist
-             (org-entry-get
-              nil (org-window-habit-property "ASSESSMENT_INTERVAL")) :default '(:days 1)))
-           (reschedule-interval
-            (org-window-habit-string-duration-to-plist
-             (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL"))))
-           (max-repetitions-per-interval
-            (string-to-number
-             (or (org-entry-get
-                  nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t) "1")))
-           (reset-time-str
-            (org-entry-get nil (org-window-habit-property "RESET_TIME")))
-           (reset-time
-            (when reset-time-str
-              (org-time-string-to-time reset-time-str)))
-           (only-days
-            (org-window-habit-parse-only-days
-             (org-entry-get nil (org-window-habit-property "ONLY_DAYS")))))
-      (make-instance 'org-window-habit
-                     :start-time nil
-                     :reset-time reset-time
-                     :only-days only-days
-                     :window-specs (or
-                                    (org-window-habit-create-specs)
-                                    (org-window-habit-create-specs-from-perfect-okay))
-                     :assessment-interval assessment-interval
-                     :reschedule-interval reschedule-interval
-                     :done-times done-times-vector
-                     :max-repetitions-per-interval max-repetitions-per-interval))))
+           (config-str (org-entry-get nil (org-window-habit-property "CONFIG") t)))
+      (if config-str
+          ;; New CONFIG property format
+          (org-window-habit-create-instance-from-config config-str done-times-vector)
+        ;; Fall back to scattered properties
+        (org-window-habit-create-instance-from-scattered-properties done-times-vector)))))
+
+(defun org-window-habit-create-instance-from-config (config-str done-times-vector)
+  "Create habit instance from CONFIG-STR with DONE-TIMES-VECTOR.
+CONFIG-STR is the value of the CONFIG property (single or versioned config)."
+  (let* ((configs (org-window-habit-parse-config config-str))
+         ;; Get current config (first in list) for active parameters
+         (current-config (car configs))
+         ;; Extract parameters from current config
+         (window-specs-data (plist-get current-config :window-specs))
+         (window-specs (cl-loop for args in window-specs-data
+                                collect (apply #'make-instance
+                                               'org-window-habit-window-spec args)))
+         (assessment-interval (or (plist-get current-config :assessment-interval)
+                                  '(:days 1)))
+         (reschedule-interval (plist-get current-config :reschedule-interval))
+         (max-reps (or (plist-get current-config :max-reps-per-interval) 1))
+         (only-days (plist-get current-config :only-days))
+         ;; :from on single config acts like reset-time
+         (reset-time (plist-get current-config :from)))
+    (make-instance 'org-window-habit
+                   :start-time nil
+                   :reset-time reset-time
+                   :only-days only-days
+                   :window-specs window-specs
+                   :assessment-interval assessment-interval
+                   :reschedule-interval reschedule-interval
+                   :done-times done-times-vector
+                   :max-repetitions-per-interval max-reps
+                   :configs configs)))
+
+(defun org-window-habit-create-instance-from-scattered-properties (done-times-vector)
+  "Create habit instance from scattered properties with DONE-TIMES-VECTOR.
+This is the backwards-compatible path for habits without CONFIG property.
+Also builds and stores a config plist in the configs slot for uniformity."
+  (let* ((assessment-interval-str
+          (org-entry-get nil (org-window-habit-property "ASSESSMENT_INTERVAL")))
+         (assessment-interval
+          (org-window-habit-string-duration-to-plist
+           assessment-interval-str :default '(:days 1)))
+         (reschedule-interval-str
+          (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL")))
+         (reschedule-interval
+          (org-window-habit-string-duration-to-plist reschedule-interval-str))
+         (max-reps-str
+          (org-entry-get nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t))
+         (max-repetitions-per-interval
+          (string-to-number (or max-reps-str "1")))
+         (reset-time-str
+          (org-entry-get nil (org-window-habit-property "RESET_TIME")))
+         (reset-time
+          (when reset-time-str
+            (org-time-string-to-time reset-time-str)))
+         (only-days-str
+          (org-entry-get nil (org-window-habit-property "ONLY_DAYS")))
+         (only-days
+          (org-window-habit-parse-only-days only-days-str))
+         (window-specs-objects
+          (or (org-window-habit-create-specs)
+              (org-window-habit-create-specs-from-perfect-okay)))
+         ;; Build window-specs as plists for the config
+         (window-specs-plists
+          (org-window-habit-build-window-specs-plists-from-properties))
+         ;; Build the config plist - only include non-default values
+         (config
+          (let ((c (list :window-specs window-specs-plists)))
+            ;; Only add :assessment-interval if explicitly set
+            (when assessment-interval-str
+              (setq c (plist-put c :assessment-interval
+                                 (org-window-habit-string-duration-to-plist
+                                  assessment-interval-str))))
+            ;; Only add :reschedule-interval if explicitly set
+            (when reschedule-interval-str
+              (setq c (plist-put c :reschedule-interval reschedule-interval)))
+            ;; Only add :max-reps-per-interval if explicitly set (and not "1")
+            (when (and max-reps-str (not (string= max-reps-str "1")))
+              (setq c (plist-put c :max-reps-per-interval max-repetitions-per-interval)))
+            ;; Only add :only-days if set
+            (when only-days
+              (setq c (plist-put c :only-days only-days)))
+            ;; Convert RESET_TIME to :from
+            (when reset-time
+              (setq c (plist-put c :from reset-time)))
+            c)))
+    (make-instance 'org-window-habit
+                   :start-time nil
+                   :reset-time reset-time
+                   :only-days only-days
+                   :window-specs window-specs-objects
+                   :assessment-interval assessment-interval
+                   :reschedule-interval reschedule-interval
+                   :done-times done-times-vector
+                   :max-repetitions-per-interval max-repetitions-per-interval
+                   :configs (list config))))
+
+(defun org-window-habit-build-window-specs-plists-from-properties ()
+  "Build window-specs as plists from current heading's scattered properties.
+Returns a list of plists suitable for storing in a config."
+  (let ((spec-text (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)))
+    (if spec-text
+        ;; WINDOW_SPECS is already in plist format
+        (car (read-from-string spec-text))
+      ;; Build from WINDOW_DURATION and REPETITIONS_REQUIRED
+      (let ((window-length
+             (org-window-habit-string-duration-to-plist
+              (org-entry-get nil (org-window-habit-property "WINDOW_DURATION")
+                             "1d") :default '(:days 1)))
+            (repetitions-required
+             (string-to-number
+              (or (org-entry-get nil
+                                 (org-window-habit-property "REPETITIONS_REQUIRED")
+                                 t) "1"))))
+        (list (list :duration window-length
+                    :repetitions repetitions-required))))))
 
 (defun org-window-habit-create-specs ()
   "Parse WINDOW_SPECS property into a list of window-spec objects.
@@ -736,6 +1014,114 @@ This is the simple configuration format for habits with one evaluation window."
       :value 1.0))))
 
 
+;; Iterator
+
+;; Migration utilities
+
+(defun org-window-habit-migrate-to-config ()
+  "Migrate current habit's scattered properties to unified CONFIG property.
+Reads WINDOW_DURATION/REPETITIONS_REQUIRED or WINDOW_SPECS,
+ASSESSMENT_INTERVAL, RESCHEDULE_INTERVAL, MAX_REPETITIONS_PER_INTERVAL,
+ONLY_DAYS, and RESET_TIME properties, builds a unified config plist,
+and writes it to the CONFIG property.
+
+If RESET_TIME exists, it's converted to :from on the config."
+  (interactive)
+  (let* ((window-specs-str (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t))
+         (window-duration (org-entry-get nil (org-window-habit-property "WINDOW_DURATION") t))
+         (reps-required (org-entry-get nil (org-window-habit-property "REPETITIONS_REQUIRED") t))
+         (assessment-str (org-entry-get nil (org-window-habit-property "ASSESSMENT_INTERVAL") t))
+         (reschedule-str (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL") t))
+         (max-reps-str (org-entry-get nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t))
+         (only-days-str (org-entry-get nil (org-window-habit-property "ONLY_DAYS") t))
+         (reset-time-str (org-entry-get nil (org-window-habit-property "RESET_TIME")))
+         ;; Build window-specs list
+         (window-specs
+          (if window-specs-str
+              ;; Advanced format: use WINDOW_SPECS directly
+              (car (read-from-string window-specs-str))
+            ;; Simple format: build from WINDOW_DURATION + REPETITIONS_REQUIRED
+            (let ((duration (org-window-habit-string-duration-to-plist
+                             window-duration :default '(:days 1)))
+                  (reps (string-to-number (or reps-required "1"))))
+              (list (list :duration duration :repetitions reps)))))
+         ;; Build config plist
+         (config (list :window-specs window-specs)))
+    ;; Add optional properties if present
+    (when assessment-str
+      (setq config (plist-put config :assessment-interval
+                              (org-window-habit-string-duration-to-plist assessment-str))))
+    (when reschedule-str
+      (setq config (plist-put config :reschedule-interval
+                              (org-window-habit-string-duration-to-plist reschedule-str))))
+    (when max-reps-str
+      (setq config (plist-put config :max-reps-per-interval
+                              (string-to-number max-reps-str))))
+    (when only-days-str
+      (setq config (plist-put config :only-days
+                              (car (read-from-string only-days-str)))))
+    ;; Convert RESET_TIME to :from
+    (when reset-time-str
+      (setq config (plist-put config :from reset-time-str)))
+    ;; Write CONFIG property
+    (org-entry-put nil (org-window-habit-property "CONFIG")
+                   (prin1-to-string config))
+    (message "Migrated habit to CONFIG property")))
+
+(defun org-window-habit-migrate-buffer ()
+  "Migrate all habits in current buffer to CONFIG property format."
+  (interactive)
+  (let ((count 0))
+    (org-map-entries
+     (lambda ()
+       (when (and (org-window-habit-entry-p)
+                  (not (org-entry-get nil (org-window-habit-property "CONFIG") t)))
+         (org-window-habit-migrate-to-config)
+         (cl-incf count))))
+    (message "Migrated %d habits" count)))
+
+(defun org-window-habit-insert-config-change (date)
+  "Insert a new config version effective from DATE.
+When called interactively, prompts for the date.
+The current config becomes the new (future) config, and a copy is
+created as the older config with :until set to DATE.
+
+This converts a single config to versioned format if needed."
+  (interactive
+   (list (org-read-date nil t nil "Config change effective from: ")))
+  (org-window-habit-insert-config-change-at-date date))
+
+(defun org-window-habit-insert-config-change-at-date (date)
+  "Insert a config change at DATE (a time value).
+Creates a versioned config where the current config continues from DATE,
+and the old config is preserved with :until DATE."
+  (let* ((config-str (org-entry-get nil (org-window-habit-property "CONFIG") t))
+         (date-str (format-time-string "%Y-%m-%d" date)))
+    (if config-str
+        ;; Have existing CONFIG property
+        (let* ((config-data (car (read-from-string config-str)))
+               (is-versioned (org-window-habit-config-is-versioned-p config-data))
+               (configs (if is-versioned config-data (list config-data)))
+               ;; Clone the current (first) config for the new entry
+               (current-config (car configs))
+               (new-current (copy-sequence current-config))
+               (new-old (copy-sequence current-config)))
+          ;; Set :from on new current config
+          (setq new-current (plist-put new-current :from date-str))
+          ;; Set :until on old config (which becomes the second entry)
+          (setq new-old (plist-put new-old :until date-str))
+          ;; Remove any :from from the old config (it should be unbounded or chained)
+          (setq new-old (plist-put new-old :from nil))
+          ;; Build new versioned config list
+          (let ((new-configs (cons new-current (cons new-old (cdr configs)))))
+            (org-entry-put nil (org-window-habit-property "CONFIG")
+                           (prin1-to-string new-configs))))
+      ;; No CONFIG - migrate first, then insert change
+      (org-window-habit-migrate-to-config)
+      (org-window-habit-insert-config-change-at-date date))
+    (message "Inserted config change effective %s" date-str)))
+
+
 ;; Iterator
 
 (defclass org-window-habit-iterator ()
@@ -1439,11 +1825,12 @@ ORIG is the original function, ARGS are its arguments."
 (defun org-window-habit-set-reset-time (date)
   "Set the reset date for the habit at point to DATE.
 When called interactively, prompt for the date using org's date selector.
-This causes completions before DATE to be ignored when calculating conformity."
+This causes completions before DATE to be ignored when calculating conformity.
+The timestamp is stored as an inactive date-only timestamp."
   (interactive
    (list (org-read-date nil t nil "Reset date: ")))
   (org-entry-put nil (org-window-habit-property "RESET_TIME")
-                 (format-time-string (org-time-stamp-format t nil) date)))
+                 (format-time-string (org-time-stamp-format nil t) date)))
 
 (defun org-window-habit-clear-reset-time ()
   "Clear the reset time for the habit at point."

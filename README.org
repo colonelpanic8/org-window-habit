@@ -77,11 +77,85 @@ org-window-habit is not yet on MELPA. Install from git using =straight.el=:
 
 1. Create a TODO heading with =SCHEDULED= or =DEADLINE= that has any repeater (the repeater value doesn't matter - org-window-habit uses its own rescheduling logic, but a repeater must be present)
 2. Add =:STYLE: habit= under =:PROPERTIES:=
-3. Add window habit properties (prefixed with =OWH_=)
+3. Add the =OWH_CONFIG= property with your habit configuration
 
-*** Simple Configuration
+*** Recommended: Unified CONFIG Property
 
-For a single evaluation window, use these properties:
+The =OWH_CONFIG= property is the recommended way to configure window habits. It uses a single property containing all habit parameters:
+
+#+begin_src org
+,* TODO Exercise
+SCHEDULED: <2024-01-15 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 5)))
+:END:
+#+end_src
+
+This defines a habit requiring 5 completions per 7-day window.
+
+*With additional options:*
+#+begin_src org
+,* TODO Exercise
+SCHEDULED: <2024-01-15 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 5)) :assessment-interval (:days 1) :only-days (:monday :wednesday :friday))
+:END:
+#+end_src
+
+*Available CONFIG keys:*
+
+| Key                     | Required | Default       | Description                                        |
+|-------------------------+----------+---------------+----------------------------------------------------|
+| =:window-specs=         | Yes      | -             | List of window specifications (see below)          |
+| =:assessment-interval=  | No       | =(:days 1)=   | How often to re-evaluate                           |
+| =:reschedule-interval=  | No       | =(:days 1)=   | Minimum time after completion before rescheduling  |
+| =:reschedule-threshold= | No       | =1.0=         | Conforming ratio threshold for rescheduling        |
+| =:max-reps-per-interval= | No      | =1=           | Max completions counted per assessment interval    |
+| =:only-days=            | No       | (all days)    | Restrict to specific days (e.g., =(:monday :friday)=) |
+| =:from=                 | No       | (unbounded)   | Ignore completions before this date                |
+
+*Window spec format:*
+#+begin_src elisp
+(:duration (:days 7) :repetitions 5)
+(:duration (:days 7) :repetitions 5 :value 1.0)  ; with explicit weight
+#+end_src
+
+*** Versioned Configurations (Evolving Habits)
+
+Habits often evolve over time - you might start with 3 workouts per week and gradually increase to 5. The CONFIG property supports *versioned configurations* that let your habit requirements change while preserving accurate historical tracking.
+
+*Example: Increasing workout frequency*
+#+begin_src org
+,* TODO Exercise
+SCHEDULED: <2024-01-15 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_CONFIG: ((:window-specs ((:duration (:days 7) :repetitions 5))) (:until "2024-06-01" :window-specs ((:duration (:days 7) :repetitions 3))))
+:END:
+#+end_src
+
+This defines:
+- Current requirement: 5 times per week (active from June 1, 2024 onward)
+- Previous requirement: 3 times per week (active until June 1, 2024)
+
+*Versioned config rules:*
+1. Configs are listed in *reverse temporal order* (most recent first)
+2. The first config has no =:until= (active now and forever)
+3. Each config's =:from= is implicitly the previous config's =:until=
+4. An explicit =:from= on a config creates a *gap* where the habit is inactive
+
+*With a gap (habit pause):*
+#+begin_src org
+:OWH_CONFIG: ((:window-specs ((:duration (:days 7) :repetitions 5))) (:until "2024-06-01" :from "2024-01-01" :window-specs ((:duration (:days 7) :repetitions 3))))
+#+end_src
+
+This habit was inactive before January 1, 2024 (the =:from= on the oldest config acts like a reset time).
+
+*** Legacy: Scattered Properties
+
+For simple configurations, you can also use individual properties:
 
 | Property                       | Description                              | Example  |
 |--------------------------------+------------------------------------------+----------|
@@ -194,6 +268,14 @@ This prevents both long gaps and insufficient frequency.
 
 All properties use the =OWH_= prefix by default (configurable via =org-window-habit-property-prefix=).
 
+*** Recommended: CONFIG Property
+
+The =OWH_CONFIG= property is the recommended approach. It contains all habit parameters in a single plist and supports versioned configurations. See "Unified CONFIG Property" above for details.
+
+*** Legacy: Scattered Properties
+
+For backwards compatibility, you can use individual properties instead of =OWH_CONFIG=:
+
 | Property                           | Default       | Description                                             |
 |------------------------------------+---------------+---------------------------------------------------------|
 | =OWH_WINDOW_DURATION=              | (required)    | Single window length (e.g., =1w=, =1m=, =(:days 7)=)    |
@@ -203,8 +285,10 @@ All properties use the =OWH_= prefix by default (configurable via =org-window-ha
 | =OWH_ASSESSMENT_INTERVAL=          | =(:days 1)=   | How often to re-evaluate (step size for rolling window) |
 | =OWH_RESCHEDULE_INTERVAL=          | =(:days 1)=   | Minimum time after completion before rescheduling       |
 | =OWH_MAX_REPETITIONS_PER_INTERVAL= | =1=           | Cap on completions counted per assessment interval      |
-| =OWH_RESET_TIME=                   | (none)        | Timestamp to ignore completions before (fresh start)    |
+| =OWH_RESET_TIME=                   | (none)        | Inactive date (e.g., =[2024-01-15]=) to ignore completions before |
 | =OWH_ONLY_DAYS=                    | (none)        | Restrict habit to specific days of week (e.g., M/W/F)   |
+
+*Note:* When =OWH_CONFIG= is present, scattered properties are ignored. You can migrate existing habits using =M-x org-window-habit-migrate-to-config=.
 
 ** Reading the Agenda Graph
 

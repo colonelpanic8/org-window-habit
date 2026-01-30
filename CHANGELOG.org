@@ -5,15 +5,31 @@ All notable changes to org-window-habit are documented in this file.
 ** Unreleased
 
 *** Added
+- *Unified CONFIG property* (=OWH_CONFIG=) - new recommended way to configure habits
+  - Single property contains all habit parameters in a plist
+  - Supports *versioned configurations* for evolving habits over time
+  - Each version can have different window-specs, assessment-interval, only-days, etc.
+  - `:from` and `:until` keys define when each config version is active
+  - Gaps in config versions make the habit inactive during that period
+- Helper functions for per-config parameter access with defaults:
+  - =org-window-habit-config-get-assessment-interval=
+  - =org-window-habit-config-get-max-reps-per-interval=
+  - =org-window-habit-config-get-reschedule-threshold=
+  - =org-window-habit-configs-get-effective-start=
+- =org-window-habit-get-effective-start= method for habit instances
+- =org-window-habit-migrate-to-config= command to migrate old habits to CONFIG format
 - =OWH_ONLY_DAYS= property to restrict habits to specific days of the week (e.g., M/W/F)
   - Completions on non-allowed days are ignored
   - Rescheduling automatically targets the next allowed day
 - Week-aligned durations with configurable start day: =(:weeks 1 :start :monday)=
 - Assessment interval anchoring to habit start time for consistent evaluation periods
-- Comprehensive tests for week alignment, anchoring, and day-of-week restrictions
+- Comprehensive tests for versioned configs, week alignment, anchoring, and day-of-week restrictions
 
 *** Changed
 - Assessment boundaries for fixed-length intervals now anchor to the habit's start time rather than arbitrary calendar boundaries
+- =OWH_RESET_TIME= now uses an inactive date-only timestamp (e.g., =[2024-01-15 Mon]=) instead of an active timestamp with time
+- Scattered properties (WINDOW_DURATION, etc.) now populate the =configs= slot internally for uniformity
+- README updated to recommend CONFIG format as primary configuration method
 
 ** 2024-01-XX
 
