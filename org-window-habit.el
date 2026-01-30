@@ -807,6 +807,16 @@ If nil, uses duration-plist for ordering.")
     :initarg :find-window :initform nil
     :documentation "Custom function to compute assessment window for a given time.
 If nil, uses `org-window-habit-get-window-where-time-in-last-assessment'.")
+   (conforming-baseline
+    :initarg :conforming-baseline :initform 1.0
+    :documentation "Fraction of target that counts as fully conforming.
+A value of 0.8 means 80% of target-repetitions gives a ratio of 1.0.
+Default 1.0 means the full target is required for 100% conforming.")
+   (max-conforming-ratio
+    :initarg :max-conforming-ratio :initform 1.0
+    :documentation "Maximum conforming ratio (allows extra credit above 1.0).
+A value of 1.2 allows up to 20% extra credit when exceeding the baseline.
+Default 1.0 caps at 100% conforming (no extra credit).")
    (habit
     :initarg :habit
     :documentation "Back-reference to the parent `org-window-habit' object.
@@ -1229,20 +1239,24 @@ Indices point into the habit's done-times vector."
   ((iterator org-window-habit-iterator) &rest args)
   "Calculate the conforming ratio for ITERATOR's current window.
 ARGS are passed to the completion counting function.
-Returns completions / (scale * target), clamped to [0.0, 1.0].
-A ratio of 1.0 means fully conforming; lower values indicate falling behind."
+Returns completions / (scale * target * baseline), clamped to [0.0, max-ratio].
+A ratio of 1.0 means fully conforming; lower values indicate falling behind.
+Values above 1.0 represent extra credit when max-conforming-ratio > 1.0."
   (with-slots (window-spec window start-index) iterator
-    (min
-     1.0
-     (/
-      (apply #'org-window-habit-get-completion-count
-             (oref window-spec habit)
-             (oref window start-time)
-             (oref window end-time)
-             :start-index start-index
-             args)
-      (* (org-window-habit-actual-window-scale iterator)
-         (oref window-spec target-repetitions))))))
+    (let ((baseline (oref window-spec conforming-baseline))
+          (max-ratio (oref window-spec max-conforming-ratio)))
+      (min
+       max-ratio
+       (/
+        (apply #'org-window-habit-get-completion-count
+               (oref window-spec habit)
+               (oref window start-time)
+               (oref window end-time)
+               :start-index start-index
+               args)
+        (* (org-window-habit-actual-window-scale iterator)
+           (oref window-spec target-repetitions)
+           baseline))))))
 
 (cl-defmethod org-window-habit-actual-window-scale
   ((iterator org-window-habit-iterator))

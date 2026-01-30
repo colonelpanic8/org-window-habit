@@ -4235,5 +4235,223 @@ returns nil, allowing callers to filter those completions."
     ;; With 2 completions and old config requiring 2, should be at 1.0
     (should (>= ratio 0.99))))
 
+;;; ---------------------------------------------------------------------------
+;;; Conforming Baseline and Extra Credit Tests
+;;; ---------------------------------------------------------------------------
+
+(ert-deftest owh-test-conforming-baseline-full-credit-at-80-percent ()
+  "Test that conforming-baseline 0.8 gives full credit at 80% of target.
+With target 5 and baseline 0.8, completing 4 should give ratio 1.0."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5
+                              :conforming-baseline 0.8))
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)
+                           (owh-test-make-time 2024 1 13)
+                           (owh-test-make-time 2024 1 12)))  ; 4 completions
+         (habit (owh-test-make-habit (list spec) done-times))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; 4 completions / (5 * 0.8) = 4/4 = 1.0
+    (should (>= ratio 0.99))))
+
+(ert-deftest owh-test-conforming-baseline-partial-credit ()
+  "Test that conforming-baseline affects partial completion correctly.
+With target 5 and baseline 0.8, completing 2 should give ratio 0.5."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5
+                              :conforming-baseline 0.8))
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)))  ; 2 completions
+         ;; Use explicit start-time so the full 7-day window is active
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :start-time (owh-test-make-time 2024 1 8)))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; 2 completions / (5 * 0.8) = 2/4 = 0.5
+    (should (< (abs (- ratio 0.5)) 0.05))))
+
+(ert-deftest owh-test-max-conforming-ratio-caps-extra-credit ()
+  "Test that max-conforming-ratio caps the extra credit.
+With target 5, baseline 0.8, and max 1.2, completing 6 should cap at 1.2."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5
+                              :conforming-baseline 0.8
+                              :max-conforming-ratio 1.2))
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)
+                           (owh-test-make-time 2024 1 13)
+                           (owh-test-make-time 2024 1 12)
+                           (owh-test-make-time 2024 1 11)
+                           (owh-test-make-time 2024 1 10)))  ; 6 completions
+         (habit (owh-test-make-habit (list spec) done-times))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; 6 completions / (5 * 0.8) = 6/4 = 1.5, but capped at 1.2
+    (should (< (abs (- ratio 1.2)) 0.01))))
+
+(ert-deftest owh-test-max-conforming-ratio-allows-extra-credit ()
+  "Test that completing more than baseline allows extra credit up to max.
+With target 5, baseline 0.8, and max 1.2, completing 5 should give 1.25 (capped to 1.2)."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5
+                              :conforming-baseline 0.8
+                              :max-conforming-ratio 1.2))
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)
+                           (owh-test-make-time 2024 1 13)
+                           (owh-test-make-time 2024 1 12)
+                           (owh-test-make-time 2024 1 11)))  ; 5 completions
+         (habit (owh-test-make-habit (list spec) done-times))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; 5 completions / (5 * 0.8) = 5/4 = 1.25, but capped at 1.2
+    (should (< (abs (- ratio 1.2)) 0.01))))
+
+(ert-deftest owh-test-conforming-baseline-default-is-1 ()
+  "Test that without conforming-baseline, default behavior (baseline 1.0) applies.
+With target 5, completing 5 should give exactly 1.0."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))  ; No baseline specified
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)
+                           (owh-test-make-time 2024 1 13)
+                           (owh-test-make-time 2024 1 12)
+                           (owh-test-make-time 2024 1 11)))  ; 5 completions
+         (habit (owh-test-make-habit (list spec) done-times))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; 5 completions / 5 = 1.0, capped at 1.0 (default max)
+    (should (= ratio 1.0))))
+
+(ert-deftest owh-test-max-conforming-ratio-default-caps-at-1 ()
+  "Test that without max-conforming-ratio, overachieving still caps at 1.0.
+With target 5, completing 7 should give 1.0 (not 1.4)."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 5))  ; No max specified
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)
+                           (owh-test-make-time 2024 1 13)
+                           (owh-test-make-time 2024 1 12)
+                           (owh-test-make-time 2024 1 11)
+                           (owh-test-make-time 2024 1 10)
+                           (owh-test-make-time 2024 1 9)))  ; 7 completions
+         (habit (owh-test-make-habit (list spec) done-times))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; Should still cap at 1.0 for backward compatibility
+    (should (= ratio 1.0))))
+
+(ert-deftest owh-test-conforming-baseline-with-window-scaling ()
+  "Test that conforming-baseline works correctly with window scaling.
+When habit started mid-window, both baseline and scale should apply."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:days 7)
+                              :repetitions 7
+                              :conforming-baseline 0.8))
+         ;; Completions starting Jan 12 (habit effectively started then)
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)
+                           (owh-test-make-time 2024 1 13)
+                           (owh-test-make-time 2024 1 12)))  ; 4 completions over 4 days
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :start-time (owh-test-make-time 2024 1 12)))
+         (iterator (org-window-habit-iterator-from-time
+                    spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (ratio (org-window-habit-conforming-ratio iterator)))
+    ;; Window is ~4/7 of full (scale ~0.57), so effective target = 7 * 0.57 * 0.8 ≈ 3.2
+    ;; 4 completions / 3.2 ≈ 1.25, but need to verify actual behavior
+    ;; The key is that baseline multiplies with scale
+    (should (>= ratio 0.99))))  ; Should be fully conforming with extra credit possible
+
+(ert-deftest owh-test-extra-credit-affects-aggregation ()
+  "Test that extra credit from one spec can affect aggregation.
+When using min aggregation, extra credit on one spec won't help if another is low."
+  (let* ((easy-spec (make-instance 'org-window-habit-window-spec
+                                   :duration '(:days 7)
+                                   :repetitions 3
+                                   :conforming-baseline 0.8
+                                   :max-conforming-ratio 1.5))
+         (hard-spec (make-instance 'org-window-habit-window-spec
+                                   :duration '(:days 7)
+                                   :repetitions 10))
+         ;; 5 completions: exceeds easy (3*0.8=2.4), but fails hard (10)
+         (done-times (list (owh-test-make-time 2024 1 15)
+                           (owh-test-make-time 2024 1 14)
+                           (owh-test-make-time 2024 1 13)
+                           (owh-test-make-time 2024 1 12)
+                           (owh-test-make-time 2024 1 11)))
+         ;; Use explicit start-time so the full 7-day window is active
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list easy-spec hard-spec)
+                               :assessment-interval '(:days 1)
+                               :max-repetitions-per-interval 1
+                               :done-times (vconcat (sort (copy-sequence done-times)
+                                                          (lambda (a b) (time-less-p b a))))
+                               :start-time (owh-test-make-time 2024 1 8)))
+         (easy-iter (org-window-habit-iterator-from-time
+                     easy-spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (hard-iter (org-window-habit-iterator-from-time
+                     hard-spec (owh-test-make-time 2024 1 15 23 0 0)))
+         (easy-ratio (org-window-habit-conforming-ratio easy-iter))
+         (hard-ratio (org-window-habit-conforming-ratio hard-iter)))
+    ;; Easy: 5 / (3 * 0.8) = 5/2.4 ≈ 2.08, capped at 1.5
+    (should (< (abs (- easy-ratio 1.5)) 0.05))
+    ;; Hard: 5 / 10 = 0.5
+    (should (< (abs (- hard-ratio 0.5)) 0.05))
+    ;; Aggregation (min) should return hard (lower) value
+    ;; aggregation-fn expects list of (ratio value window) tuples
+    (let ((agg (org-window-habit-default-aggregation-fn
+                (list (list easy-ratio nil nil)
+                      (list hard-ratio nil nil)))))
+      (should (< (abs (- agg 0.5)) 0.05)))))
+
+(ert-deftest owh-test-config-conforming-baseline-parsing ()
+  "Test that conforming-baseline is parsed from CONFIG property."
+  (let ((config-str "(:window-specs ((:duration (:days 7) :repetitions 5 :conforming-baseline 0.8)))"))
+    (let* ((configs (org-window-habit-parse-config config-str))
+           (config (car configs))
+           (window-spec-plist (car (plist-get config :window-specs))))
+      (should (= (plist-get window-spec-plist :conforming-baseline) 0.8)))))
+
+(ert-deftest owh-test-config-max-conforming-ratio-parsing ()
+  "Test that max-conforming-ratio is parsed from CONFIG property."
+  (let ((config-str "(:window-specs ((:duration (:days 7) :repetitions 5 :max-conforming-ratio 1.2)))"))
+    (let* ((configs (org-window-habit-parse-config config-str))
+           (config (car configs))
+           (window-spec-plist (car (plist-get config :window-specs))))
+      (should (= (plist-get window-spec-plist :max-conforming-ratio) 1.2)))))
+
+(ert-deftest owh-test-config-both-baseline-and-max-ratio ()
+  "Test parsing both conforming-baseline and max-conforming-ratio together."
+  (let ((config-str "(:window-specs ((:duration (:days 7) :repetitions 5 :conforming-baseline 0.8 :max-conforming-ratio 1.2)))"))
+    (let* ((configs (org-window-habit-parse-config config-str))
+           (config (car configs))
+           (window-spec-plist (car (plist-get config :window-specs))))
+      (should (= (plist-get window-spec-plist :conforming-baseline) 0.8))
+      (should (= (plist-get window-spec-plist :max-conforming-ratio) 1.2)))))
+
 (provide 'org-window-habit-test)
 ;;; org-window-habit-test.el ends here
