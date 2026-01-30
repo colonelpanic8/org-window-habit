@@ -438,6 +438,20 @@ Returns nil if the oldest config has no :from (unbounded past)."
   (when configs
     (plist-get (car (last configs)) :from)))
 
+;;; Day-of-week convenience constants
+
+(defconst org-window-habit-weekdays
+  '(:monday :tuesday :wednesday :thursday :friday)
+  "List of weekday symbols for use with only-days and reschedule-days.")
+
+(defconst org-window-habit-weekends
+  '(:saturday :sunday)
+  "List of weekend day symbols for use with only-days and reschedule-days.")
+
+(defconst org-window-habit-all-days
+  '(:sunday :monday :tuesday :wednesday :thursday :friday :saturday)
+  "List of all day symbols.")
+
 (defun org-window-habit-day-of-week-number (day-symbol)
   "Convert DAY-SYMBOL to a number (0=Sunday, 1=Monday, ..., 6=Saturday)."
   (pcase day-symbol
@@ -475,6 +489,19 @@ If ONLY-DAYS is nil, returns TIME unchanged."
              when (org-window-habit-time-on-allowed-day-p next-time only-days)
              return next-time
              finally return time)))
+
+(defun org-window-habit-effective-reschedule-days (only-days reschedule-days)
+  "Compute the effective days for rescheduling given ONLY-DAYS and RESCHEDULE-DAYS.
+If RESCHEDULE-DAYS is nil, use ONLY-DAYS (backward compatible).
+If ONLY-DAYS is nil, use RESCHEDULE-DAYS.
+If both are set, return their intersection (reschedule-days that are also in only-days).
+If both are nil, return nil (meaning all days allowed)."
+  (cond
+   ((and (null only-days) (null reschedule-days)) nil)
+   ((null reschedule-days) only-days)
+   ((null only-days) reschedule-days)
+   ;; Both are set - return intersection
+   (t (cl-intersection reschedule-days only-days))))
 
 (defun org-window-habit-normalize-time-to-duration
     (time-value duration-plist)
@@ -746,6 +773,14 @@ If nil, uses `org-window-habit-graph-assessment-fn'.")
     :initarg :only-days :initform nil
     :documentation "List of day symbols restricting when the habit applies.
 Example: (:monday :wednesday :friday). Nil means all days allowed.")
+   (reschedule-days
+    :initarg :reschedule-days :initform nil
+    :documentation "List of day symbols restricting when the habit can be rescheduled.
+Example: (:monday :tuesday :wednesday :thursday :friday) for weekdays only.
+Unlike only-days, this does NOT affect which completions count - only when
+reminders appear. If both only-days and reschedule-days are set, the effective
+reschedule days are the intersection (reschedule-days must be subset of only-days).
+Nil means use only-days for rescheduling (backward compatible).")
    (start-time
     :initarg :start-time :initform nil
     :documentation "Anchor time for assessment interval boundaries.
@@ -1482,11 +1517,11 @@ FILL-COMPLETIONS-FN allows modifying counts per interval (used for projections).
   ((habit org-window-habit) &optional now)
   "Find the next time when HABIT will need a completion.
 Searches forward from NOW until the conforming ratio drops below
-reschedule-threshold.  Respects only-days restrictions."
+reschedule-threshold.  Respects reschedule-days and only-days restrictions."
   (setq now (or now (current-time)))
   (with-slots
       (window-specs reschedule-interval reschedule-threshold assessment-interval
-                    aggregation-fn done-times only-days)
+                    aggregation-fn done-times only-days reschedule-days)
       habit
     (let ((raw-result
            (if (org-window-habit-has-any-done-times habit)
@@ -1514,8 +1549,10 @@ reschedule-threshold.  Respects only-days restrictions."
                 finally return current-assessment-start)
              (org-window-habit-normalize-time-to-duration
               now assessment-interval))))
-      ;; Snap to next allowed day if only-days is set
-      (org-window-habit-next-allowed-day raw-result only-days))))
+      ;; Snap to next allowed reschedule day
+      (org-window-habit-next-allowed-day
+       raw-result
+       (org-window-habit-effective-reschedule-days only-days reschedule-days)))))
 
 (cl-defmethod org-window-habit-get-future-required-intervals
   ((habit org-window-habit) count &optional now)
@@ -1534,7 +1571,7 @@ assuming you complete at the last possible moment each time."
   (setq now (or now (current-time)))
   (with-slots (window-specs assessment-interval reschedule-interval
                             reschedule-threshold max-repetitions-per-interval
-                            aggregation-fn only-days start-time)
+                            aggregation-fn only-days reschedule-days start-time)
       habit
     (let ((result '())
           ;; Copy done-times to a list we can extend with simulated completions
@@ -1559,6 +1596,7 @@ assuming you complete at the last possible moment each time."
                                          :max-repetitions-per-interval max-repetitions-per-interval
                                          :aggregation-fn aggregation-fn
                                          :only-days only-days
+                                         :reschedule-days reschedule-days
                                          :done-times (vconcat
                                                       (sort (copy-sequence simulated-done-times)
                                                             (lambda (a b) (time-less-p b a))))
