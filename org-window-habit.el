@@ -5,7 +5,7 @@
 ;; Author: Ivan Malison <IvanMalison@gmail.com>
 ;; Keywords: calendar org-mode habit interval window
 ;; URL: https://github.com/colonelpanic8/org-window-habit
-;; Version: 0.1.1
+;; Version: 0.1.2
 ;; Package-Requires: ((emacs "29.1") (dash "2.10.0"))
 
 ;; This program is free software; you can redistribute it and/or modify
