@@ -38,14 +38,14 @@
 ;;; Customization group
 
 (defgroup org-window-habit nil
-  "Customization options for `org-window-habit'."
+  "Customization options for the `org-window-habit' package."
   :group 'org-habit)
 
 
 ;;; Property prefix
 
 (defcustom org-window-habit-property-prefix "OWH"
-  "The prefix that will be used when finding org properties for `org-window-habit'."
+  "Property prefix for org properties used by the `org-window-habit' package."
   :group 'org-window-habit
   :type 'string)
 
@@ -139,7 +139,7 @@ returns \"OWH_WINDOW_DURATION\"."
     name))
 
 (defun org-window-habit-entry-p ()
-  "Return non-nil if entry at point is an org-window-habit.
+  "Return non-nil if entry at point is an `org-window-habit'.
 An entry is considered a window habit if it has either:
 - The CONFIG property (unified versioned format), or
 - The WINDOW_SPECS property (new format), or

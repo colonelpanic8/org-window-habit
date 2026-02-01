@@ -106,7 +106,7 @@ ORIG is the original function, ARGS are its arguments."
     res))
 
 (defun org-window-habit-add-log-note-advice (orig &rest args)
-  "Advice for `org-add-log-note' that handles org-window-habit entries.
+  "Advice for `org-add-log-note' that handles `org-window-habit' entries.
 ORIG is the original function, ARGS are its arguments.
 After the log note is added, this:
 1. Fixes logbook order if entries are out of chronological order

@@ -41,7 +41,7 @@
 ;;; Instance creation from org entry
 
 (defun org-window-habit-create-instance-from-heading-at-point ()
-  "Construct an `org-window-habit' instance from the current org entry.
+  "Construct an instance of class `org-window-habit' from the current org entry.
 Checks for CONFIG property first (unified format), then falls back to
 scattered properties (WINDOW_DURATION, WINDOW_SPECS, etc.) for backwards
 compatibility."
