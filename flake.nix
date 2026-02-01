@@ -20,19 +20,34 @@
 
         srcDir = ./.;
 
+        # All elisp source files (order matters for byte-compilation)
+        elispFiles = [
+          "org-window-habit-time.el"
+          "org-window-habit-config.el"
+          "org-window-habit-logbook.el"
+          "org-window-habit-core.el"
+          "org-window-habit-computation.el"
+          "org-window-habit-instance.el"
+          "org-window-habit-graph.el"
+          "org-window-habit-advice.el"
+          "org-window-habit-meta.el"
+          "org-window-habit.el"
+        ];
+
       in {
         checks = {
           byte-compile = pkgs.runCommand "byte-compile" {} ''
-            # Copy source to writable location
-            cp ${srcDir}/org-window-habit.el .
+            # Copy all source files to writable location
+            ${builtins.concatStringsSep "\n" (map (f: "cp ${srcDir}/${f} .") elispFiles)}
             ${emacsBin} --batch \
               --eval "(require 'package)" \
               --eval "(package-initialize)" \
               --eval "(require 'org)" \
               --eval "(require 'org-habit)" \
               --eval "(require 'dash)" \
+              --eval "(add-to-list 'load-path \".\")" \
               --eval "(setq byte-compile-error-on-warn t)" \
-              -f batch-byte-compile org-window-habit.el
+              -f batch-byte-compile ${builtins.concatStringsSep " " elispFiles}
             touch $out
           '';
 
@@ -84,6 +99,7 @@
               --eval "(require 'org)" \
               --eval "(require 'org-habit)" \
               --eval "(require 'dash)" \
+              --eval "(add-to-list 'load-path \"${srcDir}\")" \
               --load ${srcDir}/org-window-habit.el \
               --load ${srcDir}/test/org-window-habit-test.el \
               -f ert-run-tests-batch-and-exit

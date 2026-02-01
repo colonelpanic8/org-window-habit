@@ -26,6 +26,7 @@
 (require 'cl-lib)
 (require 'org-habit)
 (require 'org-window-habit-core)
+(require 'org-window-habit-computation)
 
 ;; Forward declarations for customization variables from main module
 (defvar org-window-habit-conforming-color)

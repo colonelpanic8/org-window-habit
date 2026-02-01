@@ -26,6 +26,8 @@
 (require 'org)
 (require 'org-habit)
 (require 'org-window-habit-core)
+(require 'org-window-habit-computation)
+(require 'org-window-habit-instance)
 (require 'org-window-habit-graph)
 
 ;; Forward declarations

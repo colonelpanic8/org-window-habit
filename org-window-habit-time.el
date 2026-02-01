@@ -232,10 +232,11 @@ If ONLY-DAYS is nil, returns TIME unchanged."
              finally return time)))
 
 (defun org-window-habit-effective-reschedule-days (only-days reschedule-days)
-  "Compute the effective days for rescheduling given ONLY-DAYS and RESCHEDULE-DAYS.
+  "Compute the effective days for rescheduling.
+ONLY-DAYS and RESCHEDULE-DAYS are lists of allowed day numbers.
 If RESCHEDULE-DAYS is nil, use ONLY-DAYS (backward compatible).
 If ONLY-DAYS is nil, use RESCHEDULE-DAYS.
-If both are set, return their intersection (reschedule-days that are also in only-days).
+If both are set, return their intersection.
 If both are nil, return nil (meaning all days allowed)."
   (cond
    ((and (null only-days) (null reschedule-days)) nil)

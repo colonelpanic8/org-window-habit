@@ -28,6 +28,8 @@
 (require 'org-agenda)
 (require 'org-window-habit-time)
 (require 'org-window-habit-core)
+(require 'org-window-habit-computation)
+(require 'org-window-habit-instance)
 
 ;; Forward declarations
 (declare-function org-window-habit-entry-p "org-window-habit")

@@ -155,7 +155,10 @@ Property names respect `org-window-habit-property-prefix'."
 
 (require 'org-window-habit-time)
 (require 'org-window-habit-config)
+(require 'org-window-habit-logbook)
 (require 'org-window-habit-core)
+(require 'org-window-habit-computation)
+(require 'org-window-habit-instance)
 (require 'org-window-habit-graph)
 (require 'org-window-habit-advice)
 (require 'org-window-habit-meta)
