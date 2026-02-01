@@ -57,8 +57,11 @@
               --eval "(setq sentence-end-double-space nil)" \
               --eval "(setq checkdoc-verb-check-experimental-flag nil)" \
               --eval "(setq checkdoc-spellcheck-documentation-flag nil)" \
-              --eval "(with-current-buffer (find-file-noselect \"${srcDir}/org-window-habit.el\")
-                        (checkdoc-current-buffer t)
+              --eval '(defvar checkdoc-files (list ${builtins.concatStringsSep " " (map (f: ''"${srcDir}/${f}"'') elispFiles)}))' \
+              --eval "(let ((all-warnings nil))
+                        (dolist (file checkdoc-files)
+                          (with-current-buffer (find-file-noselect file)
+                            (checkdoc-current-buffer t)))
                         (let ((warnings (get-buffer \"*Warnings*\")))
                           (when (and warnings (> (buffer-size warnings) 0))
                             (with-current-buffer warnings
