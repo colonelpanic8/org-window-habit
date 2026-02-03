@@ -30,9 +30,12 @@
 ;;; Logbook drawer bounds
 
 (defun org-window-habit-logbook-drawer-bounds ()
-  "Return the bounds (start end) of the LOGBOOK drawer at point, or nil."
-  (when (re-search-forward org-logbook-drawer-re nil t)
-    (list (match-beginning 0) (match-end 0))))
+  "Return the bounds (start end) of the LOGBOOK drawer at point, or nil.
+Only searches within the current entry's boundaries to avoid finding
+a subsequent entry's LOGBOOK drawer."
+  (let ((entry-end (save-excursion (org-entry-end-position))))
+    (when (re-search-forward org-logbook-drawer-re entry-end t)
+      (list (match-beginning 0) (match-end 0)))))
 
 
 ;;; Logbook entry regexp

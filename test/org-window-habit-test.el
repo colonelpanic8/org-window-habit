@@ -1922,6 +1922,47 @@ to the correct sorted position."
         (should (time-equal-p (nth 2 (nth 2 times))
                               (owh-test-make-time 2024 1 1 10 0 0)))))))
 
+(ert-deftest owh-test-parse-logbook-does-not-read-next-entry-logbook ()
+  "Test that parse-logbook doesn't read the next entry's LOGBOOK drawer.
+When an entry has no LOGBOOK drawer, the parser should return nil,
+not find and parse a subsequent entry's LOGBOOK. This bug caused
+completions from one habit to be incorrectly attributed to the
+preceding habit."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      ;; First habit: NO LOGBOOK drawer
+      (insert "* TODO Whitening Strips\n")
+      (insert "SCHEDULED: <2024-02-02 Mon .+3d>\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":STYLE:    habit\n")
+      (insert ":CONFIG:   (:window-specs ((:duration (:days 7) :repetitions 2)))\n")
+      (insert ":ID:       first-habit-id\n")
+      (insert ":END:\n")
+      (insert "\n")
+      ;; Second habit: HAS a LOGBOOK drawer with completions
+      (insert "* TODO Apartment Cleanliness\n")
+      (insert "SCHEDULED: <2024-02-03 Tue .+1d>\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":STYLE:    habit\n")
+      (insert ":CONFIG:   (:window-specs ((:duration (:days 7) :repetitions 5)))\n")
+      (insert ":ID:       second-habit-id\n")
+      (insert ":LAST_REPEAT: [2024-02-02 Mon 19:34]\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-02-02 Mon 19:34]\n")
+      (insert ":END:\n")
+
+      ;; Position at first habit (Whitening Strips)
+      (goto-char (point-min))
+      (org-back-to-heading t)
+
+      ;; Parse logbook for first habit - should return nil (no logbook)
+      (let ((times (save-excursion (org-window-habit-parse-logbook))))
+        ;; BUG: Currently returns the second habit's completion
+        ;; EXPECTED: Should return nil because first habit has no LOGBOOK
+        (should (null times))))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Habit Reset Tests
 ;;; ---------------------------------------------------------------------------
