@@ -2,6 +2,7 @@
 
 [[https://melpa.org/#/org-window-habit][file:https://melpa.org/packages/org-window-habit-badge.svg]]
 [[https://stable.melpa.org/#/org-window-habit][file:https://stable.melpa.org/packages/org-window-habit-badge.svg]]
+[[https://github.com/colonelpanic8/org-window-habit/actions/workflows/ci.yml][file:https://github.com/colonelpanic8/org-window-habit/actions/workflows/ci.yml/badge.svg]]
 
 ** Why org-window-habit?
 
