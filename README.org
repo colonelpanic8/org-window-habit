@@ -50,8 +50,7 @@ You want to exercise 5 times per week. With org-window-habit:
 SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: 1w
-:OWH_REPETITIONS_REQUIRED: 5
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 5)))
 :END:
 #+end_src
 
@@ -169,27 +168,9 @@ This habit was inactive before January 1, 2024 (the =:from= on the oldest config
 
 *** Legacy: Scattered Properties
 
-For simple configurations, you can also use individual properties:
+For backwards compatibility, you can use individual properties instead of =OWH_CONFIG=. See "Configuration Properties Reference" below for the full list of legacy properties and defaults.
 
-| Property                       | Description                              | Example  |
-|--------------------------------+------------------------------------------+----------|
-| =OWH_WINDOW_DURATION=          | Length of the evaluation window          | =1w=     |
-| =OWH_REPETITIONS_REQUIRED=     | Target completions within the window     | =5=      |
-| =OWH_OKAY_REPETITIONS_REQUIRED= | Minimum acceptable completions (optional) | =3=      |
-
-*Weekly exercise example:*
-#+begin_src org
-,* TODO Workout
-SCHEDULED: <2024-01-15 Mon .+1d>
-:PROPERTIES:
-:STYLE: habit
-:OWH_WINDOW_DURATION: 1w
-:OWH_REPETITIONS_REQUIRED: 5
-:OWH_OKAY_REPETITIONS_REQUIRED: 3
-:END:
-#+end_src
-
-This requires 5 workouts per week, with 3 being the minimum acceptable.
+*** Additional Examples
 
 *Monthly reading example:*
 #+begin_src org
@@ -197,8 +178,7 @@ This requires 5 workouts per week, with 3 being the minimum acceptable.
 SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: 1m
-:OWH_REPETITIONS_REQUIRED: 4
+:OWH_CONFIG: (:window-specs ((:duration (:months 1) :repetitions 4)))
 :END:
 #+end_src
 
@@ -211,9 +191,7 @@ For tasks that must happen exactly once per calendar month (not a rolling 30-day
 SCHEDULED: <2024-01-01 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: (:months 1)
-:OWH_REPETITIONS_REQUIRED: 1
-:OWH_ASSESSMENT_INTERVAL: (:months 1)
+:OWH_CONFIG: (:window-specs ((:duration (:months 1) :repetitions 1)) :assessment-interval (:months 1))
 :END:
 #+end_src
 
@@ -228,8 +206,7 @@ If you want a habit that simply repeats a fixed number of days after each comple
 SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: 3d
-:OWH_REPETITIONS_REQUIRED: 1
+:OWH_CONFIG: (:window-specs ((:duration (:days 3) :repetitions 1)))
 :END:
 #+end_src
 
@@ -243,9 +220,7 @@ The key insight is that org-window-habit's rescheduling is based on *when you'll
 SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: 8h
-:OWH_REPETITIONS_REQUIRED: 1
-:OWH_ASSESSMENT_INTERVAL: 1h
+:OWH_CONFIG: (:window-specs ((:duration (:hours 8) :repetitions 1)) :assessment-interval (:hours 1))
 :END:
 #+end_src
 
@@ -255,8 +230,7 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: 1w
-:OWH_REPETITIONS_REQUIRED: 1
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)))
 :END:
 #+end_src
 
@@ -264,11 +238,11 @@ The advantage over traditional =org-habit= is that you still get the visual conf
 
 *** Advanced Configuration: Multiple Windows
 
-For more complex requirements, use =OWH_WINDOW_SPECS= to define multiple evaluation windows. The habit must satisfy *all* windows simultaneously.
+For more complex requirements, use =:window-specs= in =OWH_CONFIG= to define multiple evaluation windows. The habit must satisfy *all* windows simultaneously.
 
 #+begin_src org
 :PROPERTIES:
-:OWH_WINDOW_SPECS: ((:duration (:days 4) :repetitions 1) (:duration (:days 6) :repetitions 2))
+:OWH_CONFIG: (:window-specs ((:duration (:days 4) :repetitions 1) (:duration (:days 6) :repetitions 2)))
 :END:
 #+end_src
 
@@ -355,9 +329,7 @@ Available start days: =:sunday=, =:monday=, =:tuesday=, =:wednesday=, =:thursday
 SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: (:weeks 1 :start :monday)
-:OWH_REPETITIONS_REQUIRED: 1
-:OWH_ASSESSMENT_INTERVAL: (:weeks 1 :start :monday)
+:OWH_CONFIG: (:window-specs ((:duration (:weeks 1 :start :monday) :repetitions 1)) :assessment-interval (:weeks 1 :start :monday))
 :END:
 #+end_src
 
@@ -367,17 +339,15 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 SCHEDULED: <2024-01-19 Fri .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: (:weeks 1 :start :friday)
-:OWH_REPETITIONS_REQUIRED: 1
-:OWH_ASSESSMENT_INTERVAL: (:weeks 1 :start :friday)
+:OWH_CONFIG: (:window-specs ((:duration (:weeks 1 :start :friday) :repetitions 1)) :assessment-interval (:weeks 1 :start :friday))
 :END:
 #+end_src
 
 *** Day-of-Week Restrictions
 
-Some habits only make sense on specific days of the week. For example, you might go to the gym on Monday, Wednesday, and Friday, or do meal prep only on weekends. The =OWH_ONLY_DAYS= property lets you restrict which days count toward your habit.
+Some habits only make sense on specific days of the week. For example, you might go to the gym on Monday, Wednesday, and Friday, or do meal prep only on weekends. Use =:only-days= in =OWH_CONFIG= to restrict which days count toward your habit (legacy =OWH_ONLY_DAYS= still works).
 
-When =OWH_ONLY_DAYS= is set:
+When =:only-days= is set:
 - Completions on non-allowed days are *ignored* when counting toward your goal
 - Rescheduling automatically targets the *next allowed day*
 
@@ -391,9 +361,7 @@ Available days: =:sunday=, =:monday=, =:tuesday=, =:wednesday=, =:thursday=, =:f
 SCHEDULED: <2024-01-15 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: 1w
-:OWH_REPETITIONS_REQUIRED: 3
-:OWH_ONLY_DAYS: (:monday :wednesday :friday)
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)) :only-days (:monday :wednesday :friday))
 :END:
 #+end_src
 
@@ -405,9 +373,7 @@ This requires 3 gym visits per week, but only Monday, Wednesday, and Friday comp
 SCHEDULED: <2024-01-20 Sat .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_WINDOW_DURATION: 1w
-:OWH_REPETITIONS_REQUIRED: 1
-:OWH_ONLY_DAYS: (:saturday :sunday)
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)) :only-days (:saturday :sunday))
 :END:
 #+end_src
 
