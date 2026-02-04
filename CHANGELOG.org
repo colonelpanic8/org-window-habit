@@ -3,6 +3,14 @@
 All notable changes to org-window-habit are documented in this file.
 
 ** Unreleased
+- No changes yet.
+
+** 2026-02-04 (v0.1.3)
+
+*** Fixed
+- Fix logbook parser reading next entry's LOGBOOK drawer
+
+** 2026-02-01 (v0.1.2)
 
 *** Added
 - *Unified CONFIG property* (=OWH_CONFIG=) - new recommended way to configure habits
@@ -24,6 +32,11 @@ All notable changes to org-window-habit are documented in this file.
 - Week-aligned durations with configurable start day: =(:weeks 1 :start :monday)=
 - Assessment interval anchoring to habit start time for consistent evaluation periods
 - Comprehensive tests for versioned configs, week alignment, anchoring, and day-of-week restrictions
+- =OWH_RESET_TIME= property to ignore completions before a specified timestamp (fresh start)
+- =org-window-habit-entry-p= predicate function for programmatic habit detection
+- Auto-fix logbook order for backdated habit completions
+- Scenario-based tests for edge cases and multi-window specs
+- Nix-based test suite with 60+ ERT tests
 
 *** Changed
 - Assessment boundaries for fixed-length intervals now anchor to the habit's start time rather than arbitrary calendar boundaries
@@ -31,20 +44,11 @@ All notable changes to org-window-habit are documented in this file.
 - Scattered properties (WINDOW_DURATION, etc.) now populate the =configs= slot internally for uniformity
 - README updated to recommend CONFIG format as primary configuration method
 
-** 2024-01-XX
-
-*** Added
-- =OWH_RESET_TIME= property to ignore completions before a specified timestamp (fresh start)
-- =org-window-habit-entry-p= predicate function for programmatic habit detection
-- Auto-fix logbook order for backdated habit completions
-- Scenario-based tests for edge cases and multi-window specs
-- Nix-based test suite with 60+ ERT tests
-
 *** Fixed
 - Byte-compile error on Emacs snapshot for unknown slot 'habit'
 - Package-lint compatibility for Emacs 29.1
 
-** 2024-01-XX (Earlier)
+** 2026-01-31 (v0.1.1)
 
 *** Added
 - Traditional org-habit style examples in README
