@@ -1,5 +1,8 @@
 * org-window-habit
 
+[[https://melpa.org/#/org-window-habit][file:https://melpa.org/packages/org-window-habit-badge.svg]]
+[[https://stable.melpa.org/#/org-window-habit][file:https://stable.melpa.org/packages/org-window-habit-badge.svg]]
+
 ** Why org-window-habit?
 
 Standard =org-habit= tracks habits using fixed repeater intervals: complete the habit, and it reschedules for the next interval. This works well for habits with predictable schedules, but many real-world habits don't fit that model:
@@ -57,7 +60,17 @@ If you only exercised 3 times so far this week and it's Friday, the graph shows 
 
 ** Installation
 
-org-window-habit is not yet on MELPA. Install from git using =straight.el=:
+org-window-habit is available on MELPA. With =use-package=:
+
+#+begin_src emacs-lisp
+(use-package org-window-habit
+  :ensure t
+  :demand t
+  :config
+  (org-window-habit-mode +1))
+#+end_src
+
+Or install from git using =straight.el=:
 
 #+begin_src emacs-lisp
 (use-package org-window-habit
