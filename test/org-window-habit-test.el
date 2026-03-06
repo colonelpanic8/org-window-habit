@@ -7,6 +7,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'org-window-habit)
 
 ;;; Test Helpers
@@ -258,6 +259,41 @@ All should align to Monday Jan 15, 2024."
     (should (owh-test-times-equal-p
              (org-window-habit-normalize-time-to-duration sunday '(:weeks 1))
              (owh-test-make-time 2024 1 15 0 0 0)))))
+
+;;; Org compatibility tests
+
+(ert-deftest owh-test-org-habit-priority-function-prefers-urgency ()
+  "Prefer `org-habit-get-urgency' when both Org APIs are available."
+  (cl-letf (((symbol-function 'fboundp)
+             (lambda (symbol)
+               (memq symbol '(org-habit-get-urgency org-habit-get-priority)))))
+    (should (eq (org-window-habit--org-habit-priority-function)
+                #'org-habit-get-urgency))))
+
+(ert-deftest owh-test-org-habit-priority-function-falls-back-to-priority ()
+  "Fall back to `org-habit-get-priority' on older Org releases."
+  (cl-letf (((symbol-function 'fboundp)
+             (lambda (symbol)
+               (eq symbol 'org-habit-get-priority))))
+    (should (eq (org-window-habit--org-habit-priority-function)
+                #'org-habit-get-priority))))
+
+(ert-deftest owh-test-org-window-habit-get-urgency-advice-uses-default-priority ()
+  "Window habits should bypass Org's list-based urgency calculation."
+  (let ((org-window-habit-mode t)
+        (org-default-priority 123))
+    (should (= (org-window-habit-get-urgency-advice
+                (lambda (&rest _) (ert-fail "Advice should not call ORIG"))
+                'dummy-habit)
+               123))))
+
+(ert-deftest owh-test-org-window-habit-get-urgency-advice-delegates-when-disabled ()
+  "When the mode is disabled, the wrapped Org function should run."
+  (let ((org-window-habit-mode nil))
+    (should (equal (org-window-habit-get-urgency-advice
+                    (lambda (&rest args) args)
+                    'dummy-habit 'dummy-moment)
+                   '(dummy-habit dummy-moment)))))
 
 (ert-deftest owh-test-normalize-time-weeks-explicit-monday ()
   "Test that (:weeks 1 :start :monday) aligns to Monday."

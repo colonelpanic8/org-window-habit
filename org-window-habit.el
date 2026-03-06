@@ -166,6 +166,14 @@ Property names respect `org-window-habit-property-prefix'."
 
 ;;; Minor mode
 
+(defun org-window-habit--org-habit-priority-function ()
+  "Return Org's habit urgency function for the current Org version.
+Older Org releases expose `org-habit-get-priority' while newer ones use
+`org-habit-get-urgency'."
+  (cond
+   ((fboundp 'org-habit-get-urgency) #'org-habit-get-urgency)
+   ((fboundp 'org-habit-get-priority) #'org-habit-get-priority)))
+
 (define-minor-mode org-window-habit-mode
   "Minor mode that replaces the normal org-habit functionality."
   :lighter nil
@@ -173,11 +181,12 @@ Property names respect `org-window-habit-property-prefix'."
   :group 'org-window-habit
   :require 'org-window-habit
   (if org-window-habit-mode
-      (progn
+      (let ((priority-function
+             (org-window-habit--org-habit-priority-function)))
         (advice-add #'org-habit-parse-todo
                     :around #'org-window-habit-parse-todo-advice)
-        (when (fboundp 'org-habit-get-urgency)
-          (advice-add #'org-habit-get-urgency
+        (when priority-function
+          (advice-add priority-function
                       :around #'org-window-habit-get-urgency-advice))
         (advice-add #'org-auto-repeat-maybe
                     :around #'org-window-habit-auto-repeat-maybe-advice)
@@ -185,12 +194,14 @@ Property names respect `org-window-habit-property-prefix'."
                     :around #'org-window-habit-add-log-note-advice)
         (advice-add #'org-habit-insert-consistency-graphs
                     :around #'org-window-habit-insert-consistency-graphs-advice))
-    (advice-remove #'org-habit-parse-todo #'org-window-habit-parse-todo-advice)
-    (when (fboundp 'org-habit-get-urgency)
-      (advice-remove #'org-habit-get-urgency #'org-window-habit-get-urgency-advice))
-    (advice-remove #'org-auto-repeat-maybe #'org-window-habit-auto-repeat-maybe-advice)
-    (advice-remove #'org-add-log-note #'org-window-habit-add-log-note-advice)
-    (advice-remove #'org-habit-insert-consistency-graphs #'org-window-habit-insert-consistency-graphs-advice)))
+    (let ((priority-function
+           (org-window-habit--org-habit-priority-function)))
+      (advice-remove #'org-habit-parse-todo #'org-window-habit-parse-todo-advice)
+      (when priority-function
+        (advice-remove priority-function #'org-window-habit-get-urgency-advice))
+      (advice-remove #'org-auto-repeat-maybe #'org-window-habit-auto-repeat-maybe-advice)
+      (advice-remove #'org-add-log-note #'org-window-habit-add-log-note-advice)
+      (advice-remove #'org-habit-insert-consistency-graphs #'org-window-habit-insert-consistency-graphs-advice))))
 
 (provide 'org-window-habit)
 ;;; org-window-habit.el ends here
