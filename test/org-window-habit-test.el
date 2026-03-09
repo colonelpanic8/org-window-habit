@@ -1960,7 +1960,7 @@ to the correct sorted position."
 
 (ert-deftest owh-test-parse-logbook-does-not-read-next-entry-logbook ()
   "Test that parse-logbook doesn't read the next entry's LOGBOOK drawer.
-When an entry has no LOGBOOK drawer, the parser should return nil,
+When an entry has no state logs, the parser should return nil,
 not find and parse a subsequent entry's LOGBOOK. This bug caused
 completions from one habit to be incorrectly attributed to the
 preceding habit."
@@ -1998,6 +1998,151 @@ preceding habit."
         ;; BUG: Currently returns the second habit's completion
         ;; EXPECTED: Should return nil because first habit has no LOGBOOK
         (should (null times))))))
+
+(ert-deftest owh-test-parse-logbook-reads-inline-state-history ()
+  "Test that parse-logbook reads inline state logs in the current entry."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert "SCHEDULED: <2024-02-02 Mon .+1d>\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":STYLE: habit\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)))\n")
+      (insert ":END:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-02-02 Mon 08:00]\n")
+      (insert "Some note text.\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-02-03 Tue 09:30]\n")
+      (goto-char (point-min))
+
+      (let ((entries (save-excursion (org-window-habit-parse-logbook))))
+        (should (= (length entries) 2))
+        (should (string= (nth 0 (nth 0 entries)) "DONE"))
+        (should (string= (nth 1 (nth 0 entries)) "TODO"))
+        (should (time-equal-p (nth 2 (nth 0 entries))
+                              (owh-test-make-time 2024 2 2 8 0 0)))
+        (should (time-equal-p (nth 2 (nth 1 entries))
+                              (owh-test-make-time 2024 2 3 9 30 0)))))))
+
+(ert-deftest owh-test-parse-logbook-reads-mixed-inline-and-drawer-state-history ()
+  "Test that parse-logbook reads state logs anywhere in the current entry."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert "SCHEDULED: <2024-02-02 Mon .+1d>\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":STYLE: habit\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)))\n")
+      (insert ":END:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-02-02 Mon 08:00]\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-02-03 Tue 09:30]\n")
+      (insert ":END:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-02-04 Wed 07:45]\n")
+      (goto-char (point-min))
+
+      (let ((entries (save-excursion (org-window-habit-parse-logbook))))
+        (should (= (length entries) 3))
+        (should (time-equal-p (nth 2 (nth 0 entries))
+                              (owh-test-make-time 2024 2 2 8 0 0)))
+        (should (time-equal-p (nth 2 (nth 1 entries))
+                              (owh-test-make-time 2024 2 3 9 30 0)))
+        (should (time-equal-p (nth 2 (nth 2 entries))
+                              (owh-test-make-time 2024 2 4 7 45 0)))))))
+
+(ert-deftest owh-test-parse-logbook-does-not-read-next-entry-inline-history ()
+  "Test that parse-logbook doesn't read inline logs from the next entry."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO First habit\n")
+      (insert "SCHEDULED: <2024-02-02 Mon .+1d>\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":STYLE: habit\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 2)))\n")
+      (insert ":END:\n\n")
+      (insert "* TODO Second habit\n")
+      (insert "SCHEDULED: <2024-02-03 Tue .+1d>\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":STYLE: habit\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 5)))\n")
+      (insert ":END:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-02-02 Mon 19:34]\n")
+      (goto-char (point-min))
+      (org-back-to-heading t)
+
+      (should (null (save-excursion (org-window-habit-parse-logbook)))))))
+
+(ert-deftest owh-test-fix-logbook-order-ignores-inline-only-history ()
+  "Test that fix-logbook-order leaves entries without drawers unchanged."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)))\n")
+      (insert ":END:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-12 Fri 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00]\n")
+      (goto-char (point-min))
+
+      (let ((before-content (buffer-string)))
+        (org-window-habit-fix-logbook-order)
+        (should (string= (buffer-string) before-content))))))
+
+(ert-deftest owh-test-create-instance-from-inline-state-history ()
+  "Test that instance creation sees inline state logs and sorts done-times."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)))\n")
+      (insert ":END:\n")
+      ;; Deliberately out of chronological order in the buffer to verify sorting.
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00]\n")
+      (insert "- State \"TODO\"       from \"DONE\"       [2024-01-16 Tue 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-05 Fri 10:00]\n")
+      (goto-char (point-min))
+
+      (let ((habit (org-window-habit-create-instance-from-heading-at-point)))
+        (should (= (length (oref habit done-times)) 3))
+        (should (time-equal-p (aref (oref habit done-times) 0)
+                              (owh-test-make-time 2024 1 15 10 0 0)))
+        (should (time-equal-p (aref (oref habit done-times) 1)
+                              (owh-test-make-time 2024 1 10 10 0 0)))
+        (should (time-equal-p (aref (oref habit done-times) 2)
+                              (owh-test-make-time 2024 1 5 10 0 0)))))))
+
+(ert-deftest owh-test-create-instance-from-mixed-state-history ()
+  "Test that instance creation combines inline and LOGBOOK completions."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 4)))\n")
+      (insert ":END:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-20 Sat 10:00]\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-18 Thu 10:00]\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00]\n")
+      (insert ":END:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-19 Fri 10:00]\n")
+      (goto-char (point-min))
+
+      (let ((habit (org-window-habit-create-instance-from-heading-at-point)))
+        (should (= (length (oref habit done-times)) 4))
+        (should (time-equal-p (aref (oref habit done-times) 0)
+                              (owh-test-make-time 2024 1 20 10 0 0)))
+        (should (time-equal-p (aref (oref habit done-times) 1)
+                              (owh-test-make-time 2024 1 19 10 0 0)))
+        (should (time-equal-p (aref (oref habit done-times) 2)
+                              (owh-test-make-time 2024 1 18 10 0 0)))
+        (should (time-equal-p (aref (oref habit done-times) 3)
+                              (owh-test-make-time 2024 1 15 10 0 0)))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Habit Reset Tests

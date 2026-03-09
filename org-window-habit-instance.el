@@ -47,9 +47,11 @@ scattered properties (WINDOW_DURATION, WINDOW_SPECS, etc.) for backwards
 compatibility."
   (save-excursion
     (let* ((done-times
-            (cl-loop for state-change-info in (org-window-habit-parse-logbook)
-                     if (member (nth 0 state-change-info) org-done-keywords)
-                     collect (nth 2 state-change-info)))
+            (sort
+             (cl-loop for state-change-info in (org-window-habit-parse-logbook)
+                      if (member (nth 0 state-change-info) org-done-keywords)
+                      collect (nth 2 state-change-info))
+             (lambda (a b) (time-less-p b a))))
            (done-times-vector (vconcat done-times))
            (config-str (org-entry-get nil (org-window-habit-property "CONFIG") t)))
       (if config-str

@@ -27,6 +27,16 @@
 (require 'org)
 
 
+;;; Entry bounds
+
+(defun org-window-habit-entry-bounds ()
+  "Return the bounds (start end) of the current Org entry."
+  (save-excursion
+    (org-back-to-heading t)
+    (list (line-beginning-position)
+          (org-entry-end-position))))
+
+
 ;;; Logbook drawer bounds
 
 (defun org-window-habit-logbook-drawer-bounds ()
@@ -44,30 +54,40 @@ a subsequent entry's LOGBOOK drawer."
   "Return a regexp matching logbook state change entries.
 STATE-REGEXP optionally specifies the pattern for matching state names."
   (unless state-regexp
-    (setq state-regexp (rx alphanumeric)))
+    (setq state-regexp (rx (+ (not (any space ?\"))))))
   (rx
    (: line-start (* space) "-" (* space))
-   "State" (* space) (? "\"") (group (* alphanumeric)) (? "\"")
-   (* space) (? (: "from" (* space) (? "\"") (group (* alphanumeric)) (? "\"")))
+   "State" (* space) (? "\"") (group (regexp state-regexp)) (? "\"")
+   (* space) (? (: "from" (* space) (? "\"")
+                    (group (regexp state-regexp)) (? "\"")))
    (* space)
-   (regexp org-ts-regexp-inactive)))
+   (group (regexp org-ts-regexp-inactive))))
 
 
-;;; Logbook parsing
+;;; State history parsing
+
+(defun org-window-habit--parse-state-history-in-region (start end)
+  "Parse state change entries between START and END.
+Each entry is returned as (to-state from-state time) in buffer order."
+  (save-excursion
+    (goto-char start)
+    (let ((re (org-window-habit-get-logbook-entry-re)))
+      (cl-loop while (re-search-forward re end t)
+               collect (list
+                        (match-string-no-properties 1)
+                        (match-string-no-properties 2)
+                        (org-time-string-to-time
+                         (match-string-no-properties 3)))))))
+
+
+;;; Entry log parsing
 
 (defun org-window-habit-parse-logbook ()
-  "Parse LOGBOOK drawer at point and return a list of state change entries.
-Each entry is (to-state from-state time)."
-  (let ((bounds (org-window-habit-logbook-drawer-bounds)))
-    (when bounds
-      (cl-destructuring-bind (start end) bounds
-        (goto-char start)
-        (let ((re (org-window-habit-get-logbook-entry-re)))
-          (cl-loop while (re-search-forward re end t)
-                   collect (list
-                            (match-string-no-properties 1)
-                            (match-string-no-properties 2)
-                            (org-time-string-to-time (match-string-no-properties 3)))))))))
+  "Parse state change logs in the current entry.
+Entries are read anywhere within the entry, including inline logs and
+LOGBOOK drawers.  Each entry is (to-state from-state time)."
+  (cl-destructuring-bind (start end) (org-window-habit-entry-bounds)
+    (org-window-habit--parse-state-history-in-region start end)))
 
 
 ;;; Logbook ordering

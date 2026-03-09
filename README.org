@@ -91,6 +91,10 @@ Or install from git using =straight.el=:
 1. Create a TODO heading with =SCHEDULED= or =DEADLINE= that has any repeater (the repeater value doesn't matter - org-window-habit uses its own rescheduling logic, but a repeater must be present)
 2. Add =:STYLE: habit= under =:PROPERTIES:=
 3. Add the =OWH_CONFIG= property with your habit configuration
+4. Ensure Org is logging TODO state changes for the entry. =org-window-habit=
+   reads completion history from standard Org state-change logs whether they
+   are stored inline or inside a =LOGBOOK= drawer. Setting
+   =org-log-into-drawer= is optional.
 
 *** Recommended: Unified CONFIG Property
 
