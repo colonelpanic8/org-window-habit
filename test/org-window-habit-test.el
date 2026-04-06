@@ -827,6 +827,18 @@ which affects the required repetitions scaling."
   (should (= (org-window-habit-default-aggregation-fn '((1.0 x))) 1.0))
   (should (= (org-window-habit-default-aggregation-fn '((0.0 x) (1.0 y))) 0.0)))
 
+(ert-deftest owh-test-weighted-average-aggregation-fn ()
+  "Test weighted average aggregation across multiple window ratios."
+  (should (= (org-window-habit-weighted-average-aggregation-fn nil) 1.0))
+  (should (= (org-window-habit-weighted-average-aggregation-fn '((1.0 1.0 x))) 1.0))
+  (should (= (org-window-habit-weighted-average-aggregation-fn
+              '((0.5 1.0 x) (1.0 3.0 y)))
+             0.875))
+  ;; Non-numeric values should fall back to weight 1.0.
+  (should (= (org-window-habit-weighted-average-aggregation-fn
+              '((0.5 (:days 2) x) (1.0 (:days 4) y)))
+             0.75)))
+
 ;;; Property Name Tests
 
 (ert-deftest owh-test-property-with-prefix ()
@@ -3929,6 +3941,23 @@ Using (:weeks 1) instead of (:days 7) for week boundaries."
         (should (= (oref (car (oref habit window-specs)) target-repetitions) 3))
         ;; Should have configs slot populated
         (should (oref habit configs))))))
+
+(ert-deftest owh-test-create-instance-from-config-property-with-aggregation-fn ()
+  "Test creating a habit instance from CONFIG with a custom aggregation function."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (goto-char (point-min))
+      (org-entry-put
+       nil "CONFIG"
+       "(:window-specs ((:duration (:days 2) :repetitions 1 :value 1.0) (:duration (:days 4) :repetitions 2 :value 1.0) (:duration (:days 8) :repetitions 4 :value 1.0)) :assessment-interval (:days 1) :aggregation-fn org-window-habit-weighted-average-aggregation-fn :reschedule-interval (:days 2))")
+      (let ((habit (org-window-habit-create-instance-from-heading-at-point)))
+        (should habit)
+        (should (eq (oref habit aggregation-fn)
+                    'org-window-habit-weighted-average-aggregation-fn))
+        (should (equal (oref habit reschedule-interval) '(:days 2)))
+        (should (= (length (oref habit window-specs)) 3))))))
 
 (ert-deftest owh-test-create-instance-backwards-compatible ()
   "Test that old scattered properties still work without CONFIG."

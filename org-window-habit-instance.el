@@ -73,6 +73,8 @@ CONFIG-STR is the value of the CONFIG property (single or versioned config)."
                                                'org-window-habit-window-spec args)))
          (assessment-interval (or (plist-get current-config :assessment-interval)
                                   '(:days 1)))
+         (aggregation-fn (or (plist-get current-config :aggregation-fn)
+                             'org-window-habit-default-aggregation-fn))
          (reschedule-interval (plist-get current-config :reschedule-interval))
          (max-reps (or (plist-get current-config :max-reps-per-interval) 1))
          (only-days (plist-get current-config :only-days))
@@ -84,6 +86,7 @@ CONFIG-STR is the value of the CONFIG property (single or versioned config)."
                    :only-days only-days
                    :window-specs window-specs
                    :assessment-interval assessment-interval
+                   :aggregation-fn aggregation-fn
                    :reschedule-interval reschedule-interval
                    :done-times done-times-vector
                    :max-repetitions-per-interval max-reps

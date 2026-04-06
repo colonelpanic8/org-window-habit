@@ -48,6 +48,23 @@ COLLECTION is a list of (ratio value window) tuples.
 Used when multiple window specs must all be satisfied."
   (cl-loop for el in collection minimize (car el)))
 
+(defun org-window-habit-weighted-average-aggregation-fn (collection)
+  "Return the weighted average conforming ratio from COLLECTION.
+COLLECTION is a list of (ratio value window) tuples.
+Numeric VALUE entries are treated as weights; non-numeric values default to 1.0."
+  (if (null collection)
+      1.0
+    (let* ((score-weight-pairs
+            (cl-loop for (ratio value _window) in collection
+                     collect (cons ratio (if (numberp value) value 1.0))))
+           (total-weight (cl-loop for pair in score-weight-pairs
+                                  sum (cdr pair)))
+           (weighted-sum (cl-loop for pair in score-weight-pairs
+                                  sum (* (car pair) (cdr pair)))))
+      (if (zerop total-weight)
+          1.0
+        (/ weighted-sum total-weight)))))
+
 
 ;;; EIEIO Classes
 

@@ -127,6 +127,7 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 |-------------------------+----------+---------------+----------------------------------------------------|
 | =:window-specs=         | Yes      | -             | List of window specifications (see below)          |
 | =:assessment-interval=  | No       | =(:days 1)=   | How often to re-evaluate                           |
+| =:aggregation-fn=       | No       | min ratio     | Function used to combine multiple window scores    |
 | =:reschedule-interval=  | No       | =(:days 1)=   | Minimum time after completion before rescheduling  |
 | =:reschedule-threshold= | No       | =1.0=         | Conforming ratio threshold for rescheduling        |
 | =:max-reps-per-interval= | No      | =1=           | Max completions counted per assessment interval    |
@@ -255,6 +256,20 @@ This requires:
 - At least 2 completions in any 6-day window
 
 This prevents both long gaps and insufficient frequency.
+
+*Example: Averaging multiple windows*
+#+begin_src org
+:PROPERTIES:
+:OWH_CONFIG: (:window-specs ((:duration (:days 2) :repetitions 1 :value 1.0)
+                             (:duration (:days 4) :repetitions 2 :value 1.0)
+                             (:duration (:days 8) :repetitions 4 :value 1.0))
+             :assessment-interval (:days 1)
+             :aggregation-fn org-window-habit-weighted-average-aggregation-fn)
+:END:
+#+end_src
+
+This averages the completion ratios for the 2, 4, and 8 day windows instead of
+taking the minimum across them.
 
 ** Configuration Properties Reference
 
