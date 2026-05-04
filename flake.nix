@@ -30,6 +30,7 @@
           "org-window-habit-instance.el"
           "org-window-habit-graph.el"
           "org-window-habit-advice.el"
+          "org-window-habit-auto-complete.el"
           "org-window-habit-meta.el"
           "org-window-habit.el"
         ];
@@ -95,6 +96,7 @@
           test = pkgs.runCommand "test" {
             # Include tzdata so DST-related tests can use set-time-zone-rule
             TZDIR = "${pkgs.tzdata}/share/zoneinfo";
+            nativeBuildInputs = [ pkgs.git ];
           } ''
             ${emacsBin} --batch \
               --eval "(require 'package)" \

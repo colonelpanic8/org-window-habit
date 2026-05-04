@@ -133,6 +133,7 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 | =:max-reps-per-interval= | No      | =1=           | Max completions counted per assessment interval    |
 | =:only-days=            | No       | (all days)    | Restrict to specific days (e.g., =(:monday :friday)=) |
 | =:from=                 | No       | (unbounded)   | Ignore completions before this date                |
+| =:auto-complete-fn=     | No       | (none)        | Predicate for optional automatic completion        |
 
 *Window spec format:*
 #+begin_src elisp
@@ -174,6 +175,65 @@ This habit was inactive before January 1, 2024 (the =:from= on the oldest config
 *** Legacy: Scattered Properties
 
 For backwards compatibility, you can use individual properties instead of =OWH_CONFIG=. See "Configuration Properties Reference" below for the full list of legacy properties and defaults.
+
+*** Automatic Completion
+
+Some habits can be completed from external state instead of manual action. Add
+=:auto-complete-fn= to a habit's =OWH_CONFIG= to opt that habit into automatic
+completion:
+
+#+begin_src org
+,* TODO Take morning medication
+SCHEDULED: <2024-01-15 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_CONFIG: (:window-specs ((:duration (:days 1) :repetitions 1)) :auto-complete-fn my-medication-taken-p)
+:END:
+#+end_src
+
+The predicate is called as:
+
+#+begin_src emacs-lisp
+(funcall auto-complete-fn marker habit now)
+#+end_src
+
+It should return non-nil when the entry should be completed. The completion
+itself is still performed by org-window-habit so logging, duplicate checks, and
+rescheduling stay centralized.
+
+Automatic completion can be run manually:
+
+#+begin_src emacs-lisp
+(org-window-habit-auto-complete-run)
+#+end_src
+
+Or enabled with a global timer:
+
+#+begin_src emacs-lisp
+(org-window-habit-auto-complete-mode +1)
+#+end_src
+
+The mode schedules one timer at a time. Each timer run scans the current
+=org-agenda-files=, completes eligible habits, then schedules the next run with
+=org-window-habit-auto-complete-interval= plus fresh random jitter from
+=org-window-habit-auto-complete-jitter=. This means habits added after startup
+are picked up on the next scan as long as they are in an agenda file.
+
+To reduce cross-machine races, a run skips a habit that already has a completion
+in the current assessment interval, and it repeats that check immediately before
+mutating the buffer. If any agenda file buffer has unsaved edits, the run
+aborts rather than saving unrelated user changes.
+
+For git-synchronized org files, you can configure a conservative prefetch:
+
+#+begin_src emacs-lisp
+(setq org-window-habit-auto-complete-prefetch-function
+      #'org-window-habit-auto-complete-prefetch-git-ff-only)
+#+end_src
+
+The built-in prefetch helper infers the single git repository containing your
+agenda files, refuses dirty worktrees, fetches, and only advances via
+fast-forward.
 
 *** Additional Examples
 
@@ -324,6 +384,10 @@ Key customizable variables (=M-x customize-group RET org-window-habit=):
 | =org-window-habit-not-conforming-color=          | ="#d40d0d"= | Color for non-conforming intervals |
 | =org-window-habit-completion-needed-today-glyph= | =?☐=       | Character for "needed today"       |
 | =org-window-habit-completed-glyph=               | =?✓=        | Character for "completed"          |
+| =org-window-habit-auto-complete-interval=        | =1800=      | Base seconds between auto scans    |
+| =org-window-habit-auto-complete-jitter=          | =300=       | Maximum random seconds per scan    |
+| =org-window-habit-auto-complete-prefetch-function= | =nil=     | Function run before auto scans     |
+| =org-window-habit-auto-complete-after-save-function= | =nil=  | Function run after auto saves      |
 
 ** Duration Format
 
