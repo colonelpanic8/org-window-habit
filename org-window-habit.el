@@ -161,6 +161,7 @@ Property names respect `org-window-habit-property-prefix'."
 (require 'org-window-habit-instance)
 (require 'org-window-habit-graph)
 (require 'org-window-habit-advice)
+(require 'org-window-habit-auto-complete)
 (require 'org-window-habit-meta)
 
 

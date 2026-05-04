@@ -2157,6 +2157,218 @@ preceding habit."
                               (owh-test-make-time 2024 1 15 10 0 0)))))))
 
 ;;; ---------------------------------------------------------------------------
+;;; Auto-completion Tests
+;;; ---------------------------------------------------------------------------
+
+(defvar owh-test-auto-complete-calls nil
+  "Calls recorded by auto-completion test predicates.")
+
+(defun owh-test-auto-complete-yes (marker habit now)
+  "Record MARKER, HABIT, and NOW, then approve auto-completion."
+  (push (list marker habit now) owh-test-auto-complete-calls)
+  t)
+
+(defun owh-test-auto-complete-no (marker habit now)
+  "Record MARKER, HABIT, and NOW, then reject auto-completion."
+  (push (list marker habit now) owh-test-auto-complete-calls)
+  nil)
+
+(ert-deftest owh-test-auto-complete-current-assessment-completion-p ()
+  "Test detecting an existing completion in the current assessment interval."
+  (let ((org-window-habit-property-prefix nil)
+        (now (owh-test-make-time 2024 1 15 12 0 0)))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)) :assessment-interval (:days 1))\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-14 Sun 23:59]\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (should-not (org-window-habit-auto-complete-current-assessment-completion-p now))
+      (goto-char (point-max))
+      (forward-line -1)
+      (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 09:00]\n")
+      (goto-char (point-min))
+      (should (org-window-habit-auto-complete-current-assessment-completion-p now)))))
+
+(ert-deftest owh-test-auto-complete-run-completes-configured-habit ()
+  "Test that auto-completion runs configured predicates and completes habits."
+  (let ((org-window-habit-property-prefix "OWH")
+        (org-log-into-drawer t)
+        (org-log-done t)
+        (owh-test-auto-complete-calls nil)
+        (now (owh-test-make-time 2024 1 15 12 0 0))
+        (temp-file (make-temp-file "owh-auto-complete-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert "* TODO Test habit\n")
+            (insert "SCHEDULED: <2024-01-15 Mon .+1d>\n")
+            (insert ":PROPERTIES:\n")
+            (insert ":STYLE: habit\n")
+            (insert ":OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)) :assessment-interval (:days 1) :auto-complete-fn owh-test-auto-complete-yes)\n")
+            (insert ":END:\n"))
+          (let ((org-agenda-files (list temp-file)))
+            (org-window-habit-auto-complete-run now)
+            (with-current-buffer (find-file-noselect temp-file)
+              (goto-char (point-min))
+              (should (= (length owh-test-auto-complete-calls) 1))
+              (should (org-window-habit-auto-complete-current-assessment-completion-p now)))))
+      (when (get-file-buffer temp-file)
+        (kill-buffer (get-file-buffer temp-file)))
+      (delete-file temp-file))))
+
+(ert-deftest owh-test-auto-complete-run-skips-existing-current-completion ()
+  "Test that existing current-interval completions suppress predicate calls."
+  (let ((org-window-habit-property-prefix "OWH")
+        (owh-test-auto-complete-calls nil)
+        (now (owh-test-make-time 2024 1 15 12 0 0))
+        (temp-file (make-temp-file "owh-auto-complete-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert "* TODO Test habit\n")
+            (insert "SCHEDULED: <2024-01-15 Mon .+1d>\n")
+            (insert ":PROPERTIES:\n")
+            (insert ":STYLE: habit\n")
+            (insert ":OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)) :assessment-interval (:days 1) :auto-complete-fn owh-test-auto-complete-yes)\n")
+            (insert ":END:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 09:00]\n")
+            (insert ":END:\n"))
+          (let ((org-agenda-files (list temp-file)))
+            (org-window-habit-auto-complete-run now)
+            (should (null owh-test-auto-complete-calls))))
+      (when (get-file-buffer temp-file)
+        (kill-buffer (get-file-buffer temp-file)))
+      (delete-file temp-file))))
+
+(ert-deftest owh-test-auto-complete-run-prefetches-before-scanning ()
+  "Test that auto-completion runs prefetch before reading agenda files."
+  (let ((org-window-habit-property-prefix "OWH")
+        (owh-test-auto-complete-calls nil)
+        (prefetch-called nil)
+        (now (owh-test-make-time 2024 1 15 12 0 0))
+        (temp-file (make-temp-file "owh-auto-complete-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert "* TODO Test habit\n")
+            (insert "SCHEDULED: <2024-01-15 Mon .+1d>\n")
+            (insert ":PROPERTIES:\n")
+            (insert ":STYLE: habit\n")
+            (insert ":OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)) :auto-complete-fn owh-test-auto-complete-yes)\n")
+            (insert ":END:\n"))
+          (let ((org-agenda-files (list temp-file))
+                (org-window-habit-auto-complete-prefetch-function
+                 (lambda () (setq prefetch-called t))))
+            (org-window-habit-auto-complete-run now)
+            (should prefetch-called)
+            (should (= (length owh-test-auto-complete-calls) 1))))
+      (when (get-file-buffer temp-file)
+        (kill-buffer (get-file-buffer temp-file)))
+      (delete-file temp-file))))
+
+(ert-deftest owh-test-auto-complete-run-refuses-modified-agenda-buffer ()
+  "Test that auto-completion refuses to run with unsaved agenda buffers."
+  (let ((temp-file (make-temp-file "owh-auto-complete-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert "* TODO Test habit\n")
+            (insert ":PROPERTIES:\n")
+            (insert ":OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)) :auto-complete-fn owh-test-auto-complete-yes)\n")
+            (insert ":END:\n"))
+          (with-current-buffer (find-file-noselect temp-file)
+            (goto-char (point-max))
+            (insert "\nUnsaved edit\n")
+            (let ((org-agenda-files (list temp-file)))
+              (should-error (org-window-habit-auto-complete-run)))))
+      (when (get-file-buffer temp-file)
+        (with-current-buffer (get-file-buffer temp-file)
+          (set-buffer-modified-p nil))
+        (kill-buffer (get-file-buffer temp-file)))
+      (delete-file temp-file))))
+
+(ert-deftest owh-test-auto-complete-run-skips-done-state ()
+  "Test that auto-completion does not call predicates for done headings."
+  (let ((org-window-habit-property-prefix "OWH")
+        (owh-test-auto-complete-calls nil)
+        (temp-file (make-temp-file "owh-auto-complete-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert "* DONE Test habit\n")
+            (insert ":PROPERTIES:\n")
+            (insert ":STYLE: habit\n")
+            (insert ":OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)) :auto-complete-fn owh-test-auto-complete-yes)\n")
+            (insert ":END:\n"))
+          (let ((org-agenda-files (list temp-file)))
+            (org-window-habit-auto-complete-run)
+            (should (null owh-test-auto-complete-calls))))
+      (when (get-file-buffer temp-file)
+        (kill-buffer (get-file-buffer temp-file)))
+      (delete-file temp-file))))
+
+(ert-deftest owh-test-auto-complete-schedule-next-run-uses-jitter ()
+  "Test that timer scheduling adds per-run jitter."
+  (let ((org-window-habit-auto-complete-interval 1800)
+        (org-window-habit-auto-complete-jitter 300)
+        scheduled-seconds)
+    (cl-letf (((symbol-function 'random) (lambda (_limit) 123))
+              ((symbol-function 'run-at-time)
+               (lambda (seconds _repeat function &rest args)
+                 (setq scheduled-seconds seconds)
+                 (list function args))))
+      (org-window-habit-auto-complete--schedule-next-run)
+      (should (= scheduled-seconds 1923)))))
+
+(ert-deftest owh-test-auto-complete-git-prefetch-refuses-dirty-tree ()
+  "Test that the git fast-forward prefetch refuses dirty worktrees."
+  (let ((repo-dir (make-temp-file "owh-git-prefetch-" t)))
+    (unwind-protect
+        (let ((default-directory repo-dir))
+          (should (= (call-process "git" nil nil nil "init") 0))
+          (with-temp-file (expand-file-name "tracked.org" repo-dir)
+            (insert "* TODO tracked\n"))
+          (should (= (call-process "git" nil nil nil "add" "tracked.org") 0))
+          (should (= (call-process "git" nil nil nil
+                                   "-c" "user.name=Test User"
+                                   "-c" "user.email=test@example.com"
+                                   "commit" "-m" "initial") 0))
+          (with-temp-file (expand-file-name "tracked.org" repo-dir)
+            (insert "* TODO dirty\n"))
+          (should-error
+           (org-window-habit-auto-complete-prefetch-git-ff-only)))
+      (delete-directory repo-dir t))))
+
+(ert-deftest owh-test-auto-complete-git-prefetch-uses-agenda-root ()
+  "Test that git prefetch infers the repository from agenda files."
+  (let ((repo-dir (make-temp-file "owh-git-prefetch-" t))
+        agenda-file)
+    (unwind-protect
+        (let ((default-directory repo-dir))
+          (should (= (call-process "git" nil nil nil "init") 0))
+          (setq agenda-file (expand-file-name "tracked.org" repo-dir))
+          (with-temp-file agenda-file
+            (insert "* TODO tracked\n"))
+          (should (= (call-process "git" nil nil nil "add" "tracked.org") 0))
+          (should (= (call-process "git" nil nil nil
+                                   "-c" "user.name=Test User"
+                                   "-c" "user.email=test@example.com"
+                                   "commit" "-m" "initial") 0))
+          (with-temp-file agenda-file
+            (insert "* TODO dirty\n"))
+          (let ((default-directory temporary-file-directory)
+                (org-agenda-files (list agenda-file)))
+            (should-error
+             (org-window-habit-auto-complete-prefetch-git-ff-only))))
+      (delete-directory repo-dir t))))
+
+;;; ---------------------------------------------------------------------------
 ;;; Habit Reset Tests
 ;;; ---------------------------------------------------------------------------
 
