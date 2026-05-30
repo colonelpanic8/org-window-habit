@@ -311,6 +311,14 @@ The colors indicate your conforming ratio:
 - Green shades: On track or ahead
 - Red shades: Falling behind on requirements
 
+When =org-window-habit-show-streak= is non-nil, the graph also appends a
+compact =S<n>= indicator. This is the current streak: the number of
+consecutive assessment intervals, ending with the current interval, whose
+aggregate conforming ratio is at least =org-window-habit-streak-threshold=.
+For a weekly 5-of-7 habit with a weekly assessment interval, =S3= means
+three consecutive conforming weeks. For a rolling daily assessment, it means
+consecutive conforming days.
+
 ** Customization
 
 Key customizable variables (=M-x customize-group RET org-window-habit=):
@@ -320,6 +328,9 @@ Key customizable variables (=M-x customize-group RET org-window-habit=):
 | =org-window-habit-property-prefix=               | ="OWH"=     | Prefix for org properties          |
 | =org-window-habit-preceding-intervals=           | =21=        | Days of history shown in graph     |
 | =org-window-habit-following-days=                | =4=         | Days of future projection in graph |
+| =org-window-habit-show-streak=                   | =t=         | Show current streak after graph    |
+| =org-window-habit-streak-format=                 | =" S%d"=    | Format for the streak indicator    |
+| =org-window-habit-streak-threshold=              | =1.0=       | Ratio required to extend streak    |
 | =org-window-habit-conforming-color=              | ="#4d7085"= | Color for conforming intervals     |
 | =org-window-habit-not-conforming-color=          | ="#d40d0d"= | Color for non-conforming intervals |
 | =org-window-habit-completion-needed-today-glyph= | =?☐=       | Character for "needed today"       |

@@ -4859,5 +4859,80 @@ When using min aggregation, extra credit on one spec won't help if another is lo
            (config (car configs)))
       (should (= (plist-get config :weight) 2.5)))))
 
+(ert-deftest owh-test-current-streak-weekly-five-of-seven ()
+  "Count consecutive conforming weeks for a 5-of-7 weekly habit."
+  (let* ((done-times
+          (vector
+           ;; Current week, Jan 22-29: conforming.
+           (owh-test-make-time 2024 1 26 10 0 0)
+           (owh-test-make-time 2024 1 25 10 0 0)
+           (owh-test-make-time 2024 1 24 10 0 0)
+           (owh-test-make-time 2024 1 23 10 0 0)
+           (owh-test-make-time 2024 1 22 10 0 0)
+           ;; Previous week, Jan 15-22: conforming.
+           (owh-test-make-time 2024 1 19 10 0 0)
+           (owh-test-make-time 2024 1 18 10 0 0)
+           (owh-test-make-time 2024 1 17 10 0 0)
+           (owh-test-make-time 2024 1 16 10 0 0)
+           (owh-test-make-time 2024 1 15 10 0 0)
+           ;; Week of Jan 8-15: not conforming.
+           (owh-test-make-time 2024 1 12 10 0 0)
+           (owh-test-make-time 2024 1 11 10 0 0)
+           (owh-test-make-time 2024 1 10 10 0 0)
+           (owh-test-make-time 2024 1 9 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs
+                               (list
+                                (make-instance
+                                 'org-window-habit-window-spec
+                                 :duration '(:weeks 1 :start :monday)
+                                 :repetitions 5))
+                               :assessment-interval
+                               '(:weeks 1 :start :monday)
+                               :max-repetitions-per-interval 5
+                               :done-times done-times
+                               :start-time
+                               (owh-test-make-time 2024 1 8 0 0 0)))
+         (query-time (owh-test-make-time 2024 1 26 12 0 0)))
+    (should (= (org-window-habit-current-streak habit query-time) 2))))
+
+(ert-deftest owh-test-current-streak-status-data ()
+  "Expose current streak in status data."
+  (let* ((done-times
+          (vector
+           (owh-test-make-time 2024 1 16 10 0 0)
+           (owh-test-make-time 2024 1 15 10 0 0)))
+         (habit (make-instance 'org-window-habit
+                               :window-specs
+                               (list
+                                (make-instance
+                                 'org-window-habit-window-spec
+                                 :duration '(:days 1)
+                                 :repetitions 1))
+                               :assessment-interval '(:days 1)
+                               :done-times done-times
+                               :start-time
+                               (owh-test-make-time 2024 1 15 0 0 0)))
+         (status (org-window-habit-get-window-specs-status
+                  habit (owh-test-make-time 2024 1 16 12 0 0))))
+    (should (= (cdr (assoc "conformingStreak" status)) 2))))
+
+(ert-deftest owh-test-current-streak-no-completions ()
+  "Habits without completions have no current streak."
+  (let ((habit (make-instance 'org-window-habit
+                              :window-specs
+                              (list
+                               (make-instance
+                                'org-window-habit-window-spec
+                                :duration '(:days 1)
+                                :repetitions 1))
+                              :assessment-interval '(:days 1)
+                              :done-times (vector)
+                              :start-time
+                              (owh-test-make-time 2024 1 15 0 0 0))))
+    (should (= (org-window-habit-current-streak
+                habit (owh-test-make-time 2024 1 16 12 0 0))
+               0))))
+
 (provide 'org-window-habit-test)
 ;;; org-window-habit-test.el ends here

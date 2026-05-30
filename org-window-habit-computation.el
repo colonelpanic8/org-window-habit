@@ -249,6 +249,42 @@ ARGS are passed to the conforming ratio calculation."
               (oref window-spec duration-plist))
           window)))
 
+(cl-defmethod org-window-habit-current-streak
+  ((habit org-window-habit) &optional time threshold)
+  "Return HABIT's consecutive conforming assessment intervals at TIME.
+TIME defaults to the current time.  THRESHOLD defaults to 1.0.
+The current interval counts if its aggregate conforming ratio is at
+least THRESHOLD, and the scan continues backward until the first
+non-conforming interval or HABIT's effective start."
+  (setq time (or time (current-time)))
+  (setq threshold (or threshold 1.0))
+  (if (not (org-window-habit-has-any-done-times habit))
+      0
+    (with-slots (window-specs assessment-decrement-plist start-time) habit
+      (let ((iterators
+             (cl-loop for window-spec in window-specs
+                      collect
+                      (org-window-habit-iterator-from-time window-spec time)))
+            (streak-start-time
+             (or (org-window-habit-get-effective-start habit) start-time))
+            (streak 0)
+            (keep-scanning t))
+        (while keep-scanning
+          (let* ((window (oref (car iterators) window))
+                 (assessment-end (oref window assessment-end-time)))
+            (if (not (time-less-p streak-start-time assessment-end))
+                (setq keep-scanning nil)
+              (let ((assessment-value
+                     (org-window-habit-assess-interval habit iterators)))
+                (if (>= assessment-value threshold)
+                    (progn
+                      (cl-incf streak)
+                      (cl-loop for iterator in iterators
+                               do (org-window-habit-advance
+                                   iterator :amount assessment-decrement-plist)))
+                  (setq keep-scanning nil))))))
+        streak))))
+
 
 ;;; Next required interval
 
@@ -394,7 +430,8 @@ Returns an alist with:
                      collect (org-window-habit-get-conforming-value iterator)))
            (aggregated-ratio (or (funcall aggregation-fn conforming-values) 0.0)))
       `(("windowSpecsStatus" . ,per-spec-data)
-        ("aggregatedConformingRatio" . ,aggregated-ratio)))))
+        ("aggregatedConformingRatio" . ,aggregated-ratio)
+        ("conformingStreak" . ,(org-window-habit-current-streak habit time))))))
 
 (cl-defmethod org-window-habit-assess-interval-with-and-without-completions
   ((habit org-window-habit) iterators modify-completions-fn)

@@ -39,6 +39,9 @@
 (defvar org-window-habit-preceding-intervals)
 (defvar org-window-habit-following-days)
 (defvar org-window-habit-graph-assessment-fn)
+(defvar org-window-habit-show-streak)
+(defvar org-window-habit-streak-format)
+(defvar org-window-habit-streak-threshold)
 
 
 ;;; Face creation
@@ -285,7 +288,42 @@ GRAPH-INFO is a list of (character face) pairs."
              (progn
                (aset graph index character)
                (put-text-property index (1+ index) 'face face graph)))
+    (put-text-property 0 (length graph) 'org-window-habit-graph t graph)
     graph))
+
+(defun org-window-habit-streak-string (habit &optional now)
+  "Return the configured streak display string for HABIT as of NOW."
+  (if org-window-habit-show-streak
+      (format org-window-habit-streak-format
+              (org-window-habit-current-streak
+               habit now org-window-habit-streak-threshold))
+    ""))
+
+(defun org-window-habit-make-graph-display-string (habit &optional now)
+  "Return HABIT's graph string with optional streak display as of NOW."
+  (let ((display
+         (concat
+          (org-window-habit-make-graph-string
+           (org-window-habit-build-graph habit now))
+          (org-window-habit-streak-string habit now))))
+    (put-text-property 0 (length display) 'org-window-habit-graph t display)
+    display))
+
+(defun org-window-habit-delete-existing-graph-at-point ()
+  "Delete an existing graph display at point.
+Prefer the `org-window-habit-graph' text property used by this package.
+Fall back to Org's fixed graph width for graph strings inserted by older
+versions or by `org-habit'."
+  (let* ((line-end (line-end-position))
+         (end
+          (if (get-text-property (point) 'org-window-habit-graph)
+              (or (next-single-property-change
+                   (point) 'org-window-habit-graph nil line-end)
+                  line-end)
+            (min (+ (point)
+                    1 org-habit-preceding-days org-habit-following-days)
+                 line-end))))
+    (delete-region (point) end)))
 
 (defun org-window-habit-insert-consistency-graphs (&optional line)
   "Insert consistency graph for any habitual tasks.
@@ -301,12 +339,9 @@ If LINE is provided, insert graphs at beggining of line"
                  (or (org-window-habit-has-any-done-times habit)
                      (progn (message "Skipping habit with no done times") nil)))
 	    (move-to-column org-habit-graph-column t)
-	    (delete-char (min (+ 1 org-habit-preceding-days
-				 org-habit-following-days)
-			              (- (line-end-position) (point))))
+        (org-window-habit-delete-existing-graph-at-point)
 	    (insert-before-markers
-	     (org-window-habit-make-graph-string
-          (org-window-habit-build-graph habit))))
+	     (org-window-habit-make-graph-display-string habit)))
       ;; TODO: this should be reintroduced
       ;; Inherit invisible state of hidden entries.
       ;; (when invisible-prop

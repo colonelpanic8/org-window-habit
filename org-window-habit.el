@@ -114,6 +114,26 @@
   :group 'org-window-habit
   :type 'integer)
 
+(defcustom org-window-habit-show-streak t
+  "Whether to append the current conformity streak to consistency graphs.
+The streak is the number of consecutive assessment intervals ending at
+the current interval whose aggregate conforming ratio is at least
+`org-window-habit-streak-threshold'."
+  :group 'org-window-habit
+  :type 'boolean)
+
+(defcustom org-window-habit-streak-format " S%d"
+  "Format string used to display a habit's current conformity streak.
+The format receives one integer argument: the number of consecutive
+conforming assessment intervals."
+  :group 'org-window-habit
+  :type 'string)
+
+(defcustom org-window-habit-streak-threshold 1.0
+  "Minimum aggregate conforming ratio that counts toward a streak."
+  :group 'org-window-habit
+  :type 'float)
+
 
 ;;; Repeat customizations
 
