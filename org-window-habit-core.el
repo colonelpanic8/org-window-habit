@@ -75,6 +75,11 @@ Numeric VALUE entries are treated as weights; non-numeric values default to 1.0.
    (assessment-interval
     :initarg :assessment-interval :initform '(:days 1)
     :documentation "Duration plist for how often to re-evaluate conformity (step size for rolling window).")
+   (reschedule-assessment-interval
+    :initarg :reschedule-assessment-interval :initform nil
+    :documentation "Duration plist for reschedule checks.
+When nil, defaults to (:days 1). This lets reminders use a
+different cadence than streak and graph assessment.")
    (reschedule-interval
     :initarg :reschedule-interval :initform '(:days 1)
     :documentation "Minimum time after completion before the habit can be rescheduled.")
@@ -89,6 +94,9 @@ Default 1.0 means reschedule as soon as not fully conforming.")
    (assessment-decrement-plist
     :initarg :assessment-decrement-plist :initform nil
     :documentation "Negated assessment-interval, used for iterating backwards through time.")
+   (reschedule-assessment-decrement-plist
+    :initarg :reschedule-assessment-decrement-plist :initform nil
+    :documentation "Negated reschedule-assessment-interval.")
    (max-repetitions-per-interval
     :initarg :max-repetitions-per-interval :initform 1
     :documentation "Maximum completions counted per assessment interval.
@@ -203,10 +211,16 @@ Validates required properties and sets up defaults."
   (when (null (oref habit window-specs))
     (error "Habits must define at least one window when org-window-habit is enabled"))
   (when (null (oref habit reschedule-interval))
-    (oset habit reschedule-interval (oref habit assessment-interval)))
+    (oset habit reschedule-interval '(:days 1)))
+  (when (null (oref habit reschedule-assessment-interval))
+    (oset habit reschedule-assessment-interval '(:days 1)))
   (when (null (oref habit assessment-decrement-plist))
     (oset habit assessment-decrement-plist
           (org-window-habit-negate-plist (oref habit assessment-interval))))
+  (when (null (oref habit reschedule-assessment-decrement-plist))
+    (oset habit reschedule-assessment-decrement-plist
+          (org-window-habit-negate-plist
+           (oref habit reschedule-assessment-interval))))
   (when (null (oref habit start-time))
     (oset habit start-time
           (org-window-habit-normalize-time-to-duration

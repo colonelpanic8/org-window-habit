@@ -123,16 +123,18 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 
 *Available CONFIG keys:*
 
-| Key                     | Required | Default       | Description                                        |
-|-------------------------+----------+---------------+----------------------------------------------------|
-| =:window-specs=         | Yes      | -             | List of window specifications (see below)          |
-| =:assessment-interval=  | No       | =(:days 1)=   | How often to re-evaluate                           |
-| =:aggregation-fn=       | No       | min ratio     | Function used to combine multiple window scores    |
-| =:reschedule-interval=  | No       | =(:days 1)=   | Minimum time after completion before rescheduling  |
-| =:reschedule-threshold= | No       | =1.0=         | Conforming ratio threshold for rescheduling        |
-| =:max-reps-per-interval= | No      | =1=           | Max completions counted per assessment interval    |
-| =:only-days=            | No       | (all days)    | Restrict to specific days (e.g., =(:monday :friday)=) |
-| =:from=                 | No       | (unbounded)   | Ignore completions before this date                |
+| Key                               | Required | Default                  | Description                                           |
+|-----------------------------------+----------+--------------------------+-------------------------------------------------------|
+| =:window-specs=                   | Yes      | -                        | List of window specifications (see below)             |
+| =:assessment-interval=            | No       | =(:days 1)=              | How often to re-evaluate streaks and graphs           |
+| =:aggregation-fn=                 | No       | min ratio                | Function used to combine multiple window scores       |
+| =:reschedule-assessment-interval= | No       | =(:days 1)=              | How often to check whether another completion is due  |
+| =:reschedule-interval=            | No       | =(:days 1)=              | Minimum time after completion before rescheduling     |
+| =:reschedule-threshold=           | No       | =1.0=                    | Conforming ratio threshold for rescheduling           |
+| =:reschedule-days=                | No       | =:only-days= or all days | Restrict reminder dates without filtering completions |
+| =:max-reps-per-interval=          | No       | =1=                      | Max completions counted per assessment interval       |
+| =:only-days=                      | No       | (all days)               | Restrict specific completion days                     |
+| =:from=                           | No       | (unbounded)              | Ignore completions before this date                   |
 
 *Window spec format:*
 #+begin_src elisp
@@ -283,17 +285,20 @@ The =OWH_CONFIG= property is the recommended approach. It contains all habit par
 
 For backwards compatibility, you can use individual properties instead of =OWH_CONFIG=:
 
-| Property                           | Default       | Description                                             |
-|------------------------------------+---------------+---------------------------------------------------------|
-| =OWH_WINDOW_DURATION=              | (required)    | Single window length (e.g., =1w=, =1m=, =(:days 7)=)    |
-| =OWH_REPETITIONS_REQUIRED=         | (required)    | Target completions for simple window                    |
-| =OWH_OKAY_REPETITIONS_REQUIRED=    | same as above | Minimum acceptable completions                          |
-| =OWH_WINDOW_SPECS=                 | (alternative) | List of window specs for complex requirements           |
-| =OWH_ASSESSMENT_INTERVAL=          | =(:days 1)=   | How often to re-evaluate (step size for rolling window) |
-| =OWH_RESCHEDULE_INTERVAL=          | =(:days 1)=   | Minimum time after completion before rescheduling       |
-| =OWH_MAX_REPETITIONS_PER_INTERVAL= | =1=           | Cap on completions counted per assessment interval      |
-| =OWH_RESET_TIME=                   | (none)        | Inactive date (e.g., =[2024-01-15]=) to ignore completions before |
-| =OWH_ONLY_DAYS=                    | (none)        | Restrict habit to specific days of week (e.g., M/W/F)   |
+| Property                             | Default                | Description                                             |
+|--------------------------------------+------------------------+---------------------------------------------------------|
+| =OWH_WINDOW_DURATION=                | (required)             | Single window length (e.g., =1w=, =1m=, =(:days 7)=)    |
+| =OWH_REPETITIONS_REQUIRED=           | (required)             | Target completions for simple window                    |
+| =OWH_OKAY_REPETITIONS_REQUIRED=      | same as above          | Minimum acceptable completions                          |
+| =OWH_WINDOW_SPECS=                   | (alternative)          | List of window specs for complex requirements           |
+| =OWH_ASSESSMENT_INTERVAL=            | =(:days 1)=            | How often to re-evaluate streaks and graphs             |
+| =OWH_RESCHEDULE_ASSESSMENT_INTERVAL= | =(:days 1)=            | How often to check whether another completion is due    |
+| =OWH_RESCHEDULE_INTERVAL=            | =(:days 1)=            | Minimum time after completion before rescheduling       |
+| =OWH_RESCHEDULE_THRESHOLD=           | =1.0=                  | Conforming ratio threshold for rescheduling             |
+| =OWH_MAX_REPETITIONS_PER_INTERVAL=   | =1=                    | Cap on completions counted per assessment interval      |
+| =OWH_RESET_TIME=                     | (none)                 | Inactive date to ignore completions before              |
+| =OWH_ONLY_DAYS=                      | (none)                 | Restrict habit to specific days of week (e.g., M/W/F)   |
+| =OWH_RESCHEDULE_DAYS=                | =OWH_ONLY_DAYS= or all | Restrict reminder dates without filtering completions   |
 
 *Note:* When =OWH_CONFIG= is present, scattered properties are ignored. You can migrate existing habits using =M-x org-window-habit-migrate-to-config=.
 
@@ -362,6 +367,23 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 :OWH_CONFIG: (:window-specs ((:duration (:weeks 1 :start :monday) :repetitions 1)) :assessment-interval (:weeks 1 :start :monday))
 :END:
 #+end_src
+
+*Example: Weekly streak with daily catch-up reminders*
+#+begin_src org
+,* TODO Exercise
+SCHEDULED: <2024-01-22 Mon .+1d>
+:PROPERTIES:
+:STYLE: habit
+:OWH_CONFIG: (:window-specs ((:duration (:weeks 1 :start :monday) :repetitions 5))
+             :assessment-interval (:weeks 1 :start :monday)
+             :max-reps-per-interval 5)
+:END:
+#+end_src
+
+This counts streaks by completed Monday-to-Monday weeks. Rescheduling still
+checks daily by default, so after each completion the habit appears again the
+next day until the week has five completions. Once the goal is met, the next
+reminder is the following Monday.
 
 *Example: Sabbath observance (Friday sundown)*
 #+begin_src org

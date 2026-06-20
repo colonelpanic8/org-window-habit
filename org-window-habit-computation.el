@@ -295,39 +295,45 @@ Searches forward from NOW until the conforming ratio drops below
 reschedule-threshold.  Respects reschedule-days and only-days restrictions."
   (setq now (or now (current-time)))
   (with-slots
-      (window-specs reschedule-interval reschedule-threshold assessment-interval
-                    aggregation-fn done-times only-days reschedule-days)
+      (window-specs reschedule-interval reschedule-threshold
+                    reschedule-assessment-interval aggregation-fn done-times
+                    only-days reschedule-days)
       habit
     (let ((raw-result
            (if (org-window-habit-has-any-done-times habit)
                (cl-loop
-                with start-time =
+                with candidate-time =
                 (org-window-habit-normalize-time-to-duration
                  (org-window-habit-time-max
                   now
-                  (org-window-habit-keyed-duration-add-plist (aref done-times 0)
-                                                             reschedule-interval))
-                 assessment-interval)
-                with iterators =
+                  (org-window-habit-keyed-duration-add-plist
+                   (aref done-times 0)
+                   reschedule-interval))
+                 reschedule-assessment-interval)
+                for iterators =
                 (cl-loop for window-spec in window-specs
                          collect
-                         (org-window-habit-iterator-from-time window-spec start-time))
-                for current-assessment-start = (oref (oref (car iterators) window) assessment-start-time)
+                         (org-window-habit-iterator-from-time
+                          window-spec candidate-time))
                 for conforming-values =
                 (cl-loop for iterator in iterators
-                         collect (org-window-habit-get-conforming-value iterator))
-                for assessment-value = (funcall aggregation-fn conforming-values)
+                         collect
+                         (org-window-habit-get-conforming-value iterator))
+                for assessment-value =
+                (funcall aggregation-fn conforming-values)
                 until (< assessment-value reschedule-threshold)
-                do
-                (cl-loop for iterator in iterators
-                         do (org-window-habit-advance iterator))
-                finally return current-assessment-start)
+                do (setq candidate-time
+                         (org-window-habit-keyed-duration-add-plist
+                          candidate-time
+                          reschedule-assessment-interval))
+                finally return candidate-time)
              (org-window-habit-normalize-time-to-duration
-              now assessment-interval))))
+              now reschedule-assessment-interval))))
       ;; Snap to next allowed reschedule day
       (org-window-habit-next-allowed-day
        raw-result
-       (org-window-habit-effective-reschedule-days only-days reschedule-days)))))
+       (org-window-habit-effective-reschedule-days
+        only-days reschedule-days)))))
 
 (cl-defmethod org-window-habit-get-future-required-intervals
   ((habit org-window-habit) count &optional now)
@@ -344,9 +350,10 @@ Each interval is computed by:
 This enables prospective planning: showing future \"must complete by\" dates
 assuming you complete at the last possible moment each time."
   (setq now (or now (current-time)))
-  (with-slots (window-specs assessment-interval reschedule-interval
-                            reschedule-threshold max-repetitions-per-interval
-                            aggregation-fn only-days reschedule-days start-time)
+  (with-slots (window-specs assessment-interval reschedule-assessment-interval
+                            reschedule-interval reschedule-threshold
+                            max-repetitions-per-interval aggregation-fn only-days
+                            reschedule-days start-time)
       habit
     (let ((result '())
           ;; Copy done-times to a list we can extend with simulated completions
@@ -366,6 +373,8 @@ assuming you complete at the last possible moment each time."
               (temp-habit (make-instance 'org-window-habit
                                          :window-specs copied-specs
                                          :assessment-interval assessment-interval
+                                         :reschedule-assessment-interval
+                                         reschedule-assessment-interval
                                          :reschedule-interval reschedule-interval
                                          :reschedule-threshold reschedule-threshold
                                          :max-repetitions-per-interval max-repetitions-per-interval

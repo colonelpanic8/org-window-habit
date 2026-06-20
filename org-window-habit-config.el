@@ -198,6 +198,17 @@ A time exactly at a config's :from belongs to that config."
   (or (plist-get config :assessment-interval)
       '(:days 1)))
 
+(defun org-window-habit-config-get-reschedule-interval (config)
+  "Get reschedule-interval from CONFIG, defaulting to (:days 1)."
+  (or (plist-get config :reschedule-interval)
+      '(:days 1)))
+
+(defun org-window-habit-config-get-reschedule-assessment-interval (config)
+  "Get reschedule-assessment-interval from CONFIG.
+Defaults to (:days 1)."
+  (or (plist-get config :reschedule-assessment-interval)
+      '(:days 1)))
+
 (defun org-window-habit-config-get-max-reps-per-interval (config)
   "Get max-reps-per-interval from CONFIG, defaulting to 1 if not set."
   (or (plist-get config :max-reps-per-interval) 1))
@@ -219,9 +230,10 @@ Returns nil if the oldest config has no :from (unbounded past)."
 (defun org-window-habit-migrate-to-config ()
   "Migrate current habit's scattered properties to unified CONFIG property.
 Reads WINDOW_DURATION/REPETITIONS_REQUIRED or WINDOW_SPECS,
-ASSESSMENT_INTERVAL, RESCHEDULE_INTERVAL, MAX_REPETITIONS_PER_INTERVAL,
-ONLY_DAYS, and RESET_TIME properties, builds a unified config plist,
-and writes it to the CONFIG property.
+ASSESSMENT_INTERVAL, RESCHEDULE_ASSESSMENT_INTERVAL, RESCHEDULE_INTERVAL,
+RESCHEDULE_THRESHOLD, MAX_REPETITIONS_PER_INTERVAL, ONLY_DAYS,
+RESCHEDULE_DAYS, and RESET_TIME properties, builds a unified config
+plist, and writes it to the CONFIG property.
 
 If RESET_TIME exists, it's converted to :from on the config."
   (interactive)
@@ -229,9 +241,16 @@ If RESET_TIME exists, it's converted to :from on the config."
          (window-duration (org-entry-get nil (org-window-habit-property "WINDOW_DURATION") t))
          (reps-required (org-entry-get nil (org-window-habit-property "REPETITIONS_REQUIRED") t))
          (assessment-str (org-entry-get nil (org-window-habit-property "ASSESSMENT_INTERVAL") t))
+         (reschedule-assessment-str
+          (org-entry-get
+           nil (org-window-habit-property "RESCHEDULE_ASSESSMENT_INTERVAL") t))
          (reschedule-str (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL") t))
+         (reschedule-threshold-str
+          (org-entry-get nil (org-window-habit-property "RESCHEDULE_THRESHOLD") t))
          (max-reps-str (org-entry-get nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t))
          (only-days-str (org-entry-get nil (org-window-habit-property "ONLY_DAYS") t))
+         (reschedule-days-str
+          (org-entry-get nil (org-window-habit-property "RESCHEDULE_DAYS") t))
          (reset-time-str (org-entry-get nil (org-window-habit-property "RESET_TIME")))
          ;; Build window-specs list
          (window-specs
@@ -249,15 +268,28 @@ If RESET_TIME exists, it's converted to :from on the config."
     (when assessment-str
       (setq config (plist-put config :assessment-interval
                               (org-window-habit-string-duration-to-plist assessment-str))))
+    (when reschedule-assessment-str
+      (setq config
+            (plist-put
+             config :reschedule-assessment-interval
+             (org-window-habit-string-duration-to-plist
+              reschedule-assessment-str))))
     (when reschedule-str
       (setq config (plist-put config :reschedule-interval
                               (org-window-habit-string-duration-to-plist reschedule-str))))
+    (when reschedule-threshold-str
+      (setq config (plist-put config :reschedule-threshold
+                              (string-to-number reschedule-threshold-str))))
     (when max-reps-str
       (setq config (plist-put config :max-reps-per-interval
                               (string-to-number max-reps-str))))
     (when only-days-str
       (setq config (plist-put config :only-days
                               (car (read-from-string only-days-str)))))
+    (when reschedule-days-str
+      (setq config (plist-put config :reschedule-days
+                              (car (read-from-string
+                                    reschedule-days-str)))))
     ;; Convert RESET_TIME to :from
     (when reset-time-str
       (setq config (plist-put config :from reset-time-str)))
