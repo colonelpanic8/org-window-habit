@@ -1015,7 +1015,7 @@ This tests backwards compatibility - both old formats work."
                   :start-time nil)))
 
 (ert-deftest owh-test-habit-sets-reschedule-interval-default ()
-  "Test that reschedule-interval defaults to assessment-interval."
+  "Test that reschedule-interval defaults to one day."
   (let* ((spec (make-instance 'org-window-habit-window-spec))
          (habit (make-instance 'org-window-habit
                                :window-specs (list spec)
@@ -1023,7 +1023,20 @@ This tests backwards compatibility - both old formats work."
                                :reschedule-interval nil
                                :done-times []
                                :start-time nil)))
-    (should (equal (oref habit reschedule-interval) '(:days 2)))))
+    (should (equal (oref habit reschedule-interval) '(:days 1)))))
+
+(ert-deftest owh-test-habit-sets-reschedule-assessment-default ()
+  "Test that reschedule-assessment-interval defaults to one day."
+  (let* ((spec (make-instance 'org-window-habit-window-spec))
+         (habit (make-instance 'org-window-habit
+                               :window-specs (list spec)
+                               :assessment-interval '(:weeks 1 :start :monday)
+                               :reschedule-interval '(:days 2)
+                               :reschedule-assessment-interval nil
+                               :done-times []
+                               :start-time nil)))
+    (should (equal (oref habit reschedule-assessment-interval)
+                   '(:days 1)))))
 
 (ert-deftest owh-test-habit-links-window-specs ()
   "Test that habit initialization links window-specs back to habit."
@@ -1784,6 +1797,67 @@ Use explicit start-time to avoid window scaling."
     (should (org-window-habit-time-greater-p
              next-required
              (owh-test-make-time 2024 1 15)))))
+
+(ert-deftest owh-test-default-rescheduling-decouples-weekly-streak ()
+  "Daily rescheduling is the default for weekly streak assessment."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:weeks 1 :start :monday)
+                              :repetitions 5))
+         (monday (owh-test-make-time 2024 1 22 10 0 0))
+         (tuesday (owh-test-make-time 2024 1 23 10 0 0))
+         (wednesday (owh-test-make-time 2024 1 24 10 0 0))
+         (thursday (owh-test-make-time 2024 1 25 10 0 0))
+         (friday (owh-test-make-time 2024 1 26 10 0 0))
+         (habit (make-instance
+                 'org-window-habit
+                 :window-specs (list spec)
+                 :assessment-interval '(:weeks 1 :start :monday)
+                 :max-repetitions-per-interval 5
+                 :done-times (vector tuesday monday)
+                 :start-time (owh-test-make-time 2024 1 22 0 0 0))))
+    (should
+     (owh-test-times-equal-p
+      (org-window-habit-get-next-required-interval
+       habit (owh-test-make-time 2024 1 23 12 0 0))
+      (owh-test-make-time 2024 1 24 0 0 0)))
+    (oset habit done-times (vector wednesday tuesday monday))
+    (should
+     (owh-test-times-equal-p
+      (org-window-habit-get-next-required-interval
+       habit (owh-test-make-time 2024 1 24 12 0 0))
+      (owh-test-make-time 2024 1 25 0 0 0)))
+    (oset habit done-times (vector friday thursday wednesday tuesday monday))
+    (should
+     (owh-test-times-equal-p
+      (org-window-habit-get-next-required-interval
+       habit (owh-test-make-time 2024 1 26 12 0 0))
+      (owh-test-make-time 2024 1 29 0 0 0)))
+    (should (= (org-window-habit-current-streak
+                habit (owh-test-make-time 2024 1 26 12 0 0))
+               1))))
+
+(ert-deftest owh-test-reschedule-assessment-interval-explicit-override ()
+  "Explicit reschedule-assessment-interval overrides the daily default."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:weeks 1 :start :monday)
+                              :repetitions 5))
+         (monday (owh-test-make-time 2024 1 22 10 0 0))
+         (tuesday (owh-test-make-time 2024 1 23 10 0 0))
+         (habit (make-instance
+                 'org-window-habit
+                 :window-specs (list spec)
+                 :assessment-interval '(:weeks 1 :start :monday)
+                 :reschedule-assessment-interval
+                 '(:weeks 1 :start :monday)
+                 :reschedule-interval '(:days 1)
+                 :max-repetitions-per-interval 5
+                 :done-times (vector tuesday monday)
+                 :start-time (owh-test-make-time 2024 1 22 0 0 0))))
+    (should
+     (owh-test-times-equal-p
+      (org-window-habit-get-next-required-interval
+       habit (owh-test-make-time 2024 1 23 12 0 0))
+      (owh-test-make-time 2024 1 22 0 0 0)))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Scenario: Complex Multi-Spec Habit (Fitness tracking)
@@ -3539,6 +3613,32 @@ prevents scheduling too soon after a completion."
              (nth 0 intervals)
              (owh-test-make-time 2024 1 17 0 0 0)))))
 
+(ert-deftest owh-test-future-intervals-default-weekly-catch-up ()
+  "Future intervals use daily catch-up by default for weekly quotas."
+  (let* ((spec (make-instance 'org-window-habit-window-spec
+                              :duration '(:weeks 1 :start :monday)
+                              :repetitions 5))
+         (monday (owh-test-make-time 2024 1 22 10 0 0))
+         (tuesday (owh-test-make-time 2024 1 23 10 0 0))
+         (habit (make-instance
+                 'org-window-habit
+                 :window-specs (list spec)
+                 :assessment-interval '(:weeks 1 :start :monday)
+                 :max-repetitions-per-interval 5
+                 :done-times (vector tuesday monday)
+                 :start-time (owh-test-make-time 2024 1 22 0 0 0)))
+         (intervals (org-window-habit-get-future-required-intervals
+                     habit 3 (owh-test-make-time 2024 1 23 12 0 0))))
+    (should (owh-test-times-equal-p
+             (nth 0 intervals)
+             (owh-test-make-time 2024 1 24 0 0 0)))
+    (should (owh-test-times-equal-p
+             (nth 1 intervals)
+             (owh-test-make-time 2024 1 25 0 0 0)))
+    (should (owh-test-times-equal-p
+             (nth 2 intervals)
+             (owh-test-make-time 2024 1 26 0 0 0)))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Edge Case: Max Repetitions Per Interval
 ;;; ---------------------------------------------------------------------------
@@ -4212,18 +4312,22 @@ returns nil, allowing callers to filter those completions."
   "Test that a config can contain all habit parameters."
   (let ((config-str "(:window-specs ((:duration (:days 7) :repetitions 3))
                      :assessment-interval (:days 2)
+                     :reschedule-assessment-interval (:days 1)
                      :reschedule-interval (:days 1)
                      :reschedule-threshold 0.8
                      :max-reps-per-interval 2
                      :only-days (:monday :wednesday :friday)
+                     :reschedule-days (:monday :friday)
                      :aggregation-fn org-window-habit-default-aggregation-fn)"))
     (let* ((configs (org-window-habit-parse-config config-str))
            (config (car configs)))
       (should (equal (plist-get config :assessment-interval) '(:days 2)))
+      (should (equal (plist-get config :reschedule-assessment-interval) '(:days 1)))
       (should (equal (plist-get config :reschedule-interval) '(:days 1)))
       (should (= (plist-get config :reschedule-threshold) 0.8))
       (should (= (plist-get config :max-reps-per-interval) 2))
       (should (equal (plist-get config :only-days) '(:monday :wednesday :friday)))
+      (should (equal (plist-get config :reschedule-days) '(:monday :friday)))
       (should (eq (plist-get config :aggregation-fn) 'org-window-habit-default-aggregation-fn)))))
 
 (ert-deftest owh-test-versioned-configs-different-assessment-intervals ()
@@ -4335,6 +4439,64 @@ returns nil, allowing callers to filter those completions."
       (should (null (plist-get config :reschedule-threshold)))
       (should (= (org-window-habit-config-get-reschedule-threshold config) 1.0)))))
 
+(ert-deftest owh-test-config-defaults-reschedule-assessment-interval ()
+  "Missing reschedule-assessment-interval defaults to one day."
+  (let ((config-str "(:window-specs ((:duration (:days 7) :repetitions 3))
+                     :assessment-interval (:weeks 1 :start :monday)
+                     :reschedule-interval (:days 2))"))
+    (let* ((configs (org-window-habit-parse-config config-str))
+           (config (car configs)))
+      (should (null (plist-get config :reschedule-assessment-interval)))
+      (should
+       (equal
+        (org-window-habit-config-get-reschedule-assessment-interval config)
+        '(:days 1))))))
+
+(ert-deftest owh-test-config-defaults-reschedule-interval ()
+  "Missing reschedule-interval defaults to one day."
+  (let ((config-str "(:window-specs ((:duration (:days 7) :repetitions 3))
+                     :assessment-interval (:weeks 1 :start :monday))"))
+    (let* ((configs (org-window-habit-parse-config config-str))
+           (config (car configs)))
+      (should (null (plist-get config :reschedule-interval)))
+      (should (equal (org-window-habit-config-get-reschedule-interval config)
+                     '(:days 1)))
+      (should
+       (equal
+        (org-window-habit-config-get-reschedule-assessment-interval config)
+        '(:days 1))))))
+
+(ert-deftest owh-test-create-instance-from-config-default-rescheduling ()
+  "CONFIG habits default to daily rescheduling even with weekly assessment."
+  (let* ((config-str "(:window-specs ((:duration (:weeks 1 :start :monday)
+                                      :repetitions 5))
+                     :assessment-interval (:weeks 1 :start :monday)
+                     :max-reps-per-interval 5)")
+         (habit (org-window-habit-create-instance-from-config config-str [])))
+    (should (equal (oref habit assessment-interval)
+                   '(:weeks 1 :start :monday)))
+    (should (equal (oref habit reschedule-interval) '(:days 1)))
+    (should (equal (oref habit reschedule-assessment-interval)
+                   '(:days 1)))))
+
+(ert-deftest owh-test-create-instance-from-config-reschedule-options ()
+  "CONFIG reschedule options are passed into habit instances."
+  (let* ((config-str "(:window-specs ((:duration (:days 7) :repetitions 3))
+                     :assessment-interval (:weeks 1 :start :monday)
+                     :reschedule-assessment-interval (:days 1)
+                     :reschedule-interval (:days 1)
+                     :reschedule-threshold 0.8
+                     :reschedule-days (:monday :wednesday :friday))")
+         (habit (org-window-habit-create-instance-from-config config-str [])))
+    (should (equal (oref habit assessment-interval)
+                   '(:weeks 1 :start :monday)))
+    (should (equal (oref habit reschedule-assessment-interval)
+                   '(:days 1)))
+    (should (equal (oref habit reschedule-interval) '(:days 1)))
+    (should (= (oref habit reschedule-threshold) 0.8))
+    (should (equal (oref habit reschedule-days)
+                   '(:monday :wednesday :friday)))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Versioned Config: Scattered Properties Conversion
 ;;; ---------------------------------------------------------------------------
@@ -4349,9 +4511,12 @@ returns nil, allowing callers to filter those completions."
       (insert ":WINDOW_DURATION: 7d\n")
       (insert ":REPETITIONS_REQUIRED: 3\n")
       (insert ":ASSESSMENT_INTERVAL: (:days 2)\n")
+      (insert ":RESCHEDULE_ASSESSMENT_INTERVAL: (:days 1)\n")
       (insert ":RESCHEDULE_INTERVAL: (:days 1)\n")
+      (insert ":RESCHEDULE_THRESHOLD: 0.8\n")
       (insert ":MAX_REPETITIONS_PER_INTERVAL: 2\n")
       (insert ":ONLY_DAYS: (:monday :wednesday :friday)\n")
+      (insert ":RESCHEDULE_DAYS: (:monday :friday)\n")
       (insert ":RESET_TIME: [2024-06-01]\n")
       (insert ":END:\n")
       (insert ":LOGBOOK:\n")
@@ -4365,9 +4530,14 @@ returns nil, allowing callers to filter those completions."
           ;; All properties should be in the config
           (should (plist-get config :window-specs))
           (should (equal (plist-get config :assessment-interval) '(:days 2)))
+          (should (equal (plist-get config :reschedule-assessment-interval)
+                         '(:days 1)))
           (should (equal (plist-get config :reschedule-interval) '(:days 1)))
+          (should (= (plist-get config :reschedule-threshold) 0.8))
           (should (= (plist-get config :max-reps-per-interval) 2))
           (should (equal (plist-get config :only-days) '(:monday :wednesday :friday)))
+          (should (equal (plist-get config :reschedule-days)
+                         '(:monday :friday)))
           ;; RESET_TIME should become :from
           (should (owh-test-times-equal-p (plist-get config :from)
                                           (owh-test-make-time 2024 6 1))))))))
@@ -4394,6 +4564,29 @@ returns nil, allowing callers to filter those completions."
           ;; Optional fields should be nil (defaults applied at usage time)
           (should (null (plist-get config :assessment-interval)))
           (should (null (plist-get config :from))))))))
+
+(ert-deftest owh-test-scattered-properties-default-daily-rescheduling ()
+  "Scattered properties default to daily rescheduling for weekly assessment."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":WINDOW_SPECS: ((:duration (:weeks 1 :start :monday) :repetitions 5))\n")
+      (insert ":ASSESSMENT_INTERVAL: (:weeks 1 :start :monday)\n")
+      (insert ":MAX_REPETITIONS_PER_INTERVAL: 5\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (let ((habit (org-window-habit-create-instance-from-heading-at-point)))
+        (should (equal (oref habit assessment-interval)
+                       '(:weeks 1 :start :monday)))
+        (should (equal (oref habit reschedule-interval) '(:days 1)))
+        (should (equal (oref habit reschedule-assessment-interval)
+                       '(:days 1)))
+        (let ((config (car (oref habit configs))))
+          (should (null (plist-get config :reschedule-interval)))
+          (should (null (plist-get config
+                                   :reschedule-assessment-interval))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Versioned Config: No Separate reset-time Slot

@@ -73,21 +73,31 @@ CONFIG-STR is the value of the CONFIG property (single or versioned config)."
                                                'org-window-habit-window-spec args)))
          (assessment-interval (or (plist-get current-config :assessment-interval)
                                   '(:days 1)))
+         (reschedule-interval
+          (org-window-habit-config-get-reschedule-interval current-config))
+         (reschedule-assessment-interval
+          (org-window-habit-config-get-reschedule-assessment-interval
+           current-config))
          (aggregation-fn (or (plist-get current-config :aggregation-fn)
                              'org-window-habit-default-aggregation-fn))
-         (reschedule-interval (plist-get current-config :reschedule-interval))
+         (reschedule-threshold
+          (or (plist-get current-config :reschedule-threshold) 1.0))
          (max-reps (or (plist-get current-config :max-reps-per-interval) 1))
          (only-days (plist-get current-config :only-days))
+         (reschedule-days (plist-get current-config :reschedule-days))
          ;; :from on single config acts like reset-time
          (reset-time (plist-get current-config :from)))
     (make-instance 'org-window-habit
                    :start-time nil
                    :reset-time reset-time
                    :only-days only-days
+                   :reschedule-days reschedule-days
                    :window-specs window-specs
                    :assessment-interval assessment-interval
+                   :reschedule-assessment-interval reschedule-assessment-interval
                    :aggregation-fn aggregation-fn
                    :reschedule-interval reschedule-interval
+                   :reschedule-threshold reschedule-threshold
                    :done-times done-times-vector
                    :max-repetitions-per-interval max-reps
                    :configs configs)))
@@ -104,7 +114,20 @@ Also builds and stores a config plist in the configs slot for uniformity."
          (reschedule-interval-str
           (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL")))
          (reschedule-interval
-          (org-window-habit-string-duration-to-plist reschedule-interval-str))
+          (org-window-habit-string-duration-to-plist
+           reschedule-interval-str :default '(:days 1)))
+         (reschedule-assessment-interval-str
+          (org-entry-get
+           nil (org-window-habit-property "RESCHEDULE_ASSESSMENT_INTERVAL")))
+         (reschedule-assessment-interval
+          (org-window-habit-string-duration-to-plist
+           reschedule-assessment-interval-str :default '(:days 1)))
+         (reschedule-threshold-str
+          (org-entry-get nil (org-window-habit-property "RESCHEDULE_THRESHOLD")))
+         (reschedule-threshold
+          (if reschedule-threshold-str
+              (string-to-number reschedule-threshold-str)
+            1.0))
          (max-reps-str
           (org-entry-get nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t))
          (max-repetitions-per-interval
@@ -118,6 +141,10 @@ Also builds and stores a config plist in the configs slot for uniformity."
           (org-entry-get nil (org-window-habit-property "ONLY_DAYS")))
          (only-days
           (org-window-habit-parse-only-days only-days-str))
+         (reschedule-days-str
+          (org-entry-get nil (org-window-habit-property "RESCHEDULE_DAYS")))
+         (reschedule-days
+          (org-window-habit-parse-only-days reschedule-days-str))
          (window-specs-objects
           (or (org-window-habit-create-specs)
               (org-window-habit-create-specs-from-perfect-okay)))
@@ -132,15 +159,27 @@ Also builds and stores a config plist in the configs slot for uniformity."
               (setq c (plist-put c :assessment-interval
                                  (org-window-habit-string-duration-to-plist
                                   assessment-interval-str))))
+            ;; Only add :reschedule-assessment-interval if explicitly set
+            (when reschedule-assessment-interval-str
+              (setq c (plist-put
+                       c :reschedule-assessment-interval
+                       reschedule-assessment-interval)))
             ;; Only add :reschedule-interval if explicitly set
             (when reschedule-interval-str
               (setq c (plist-put c :reschedule-interval reschedule-interval)))
+            ;; Only add :reschedule-threshold if explicitly set
+            (when reschedule-threshold-str
+              (setq c (plist-put c :reschedule-threshold
+                                 reschedule-threshold)))
             ;; Only add :max-reps-per-interval if explicitly set (and not "1")
             (when (and max-reps-str (not (string= max-reps-str "1")))
               (setq c (plist-put c :max-reps-per-interval max-repetitions-per-interval)))
             ;; Only add :only-days if set
             (when only-days
               (setq c (plist-put c :only-days only-days)))
+            ;; Only add :reschedule-days if set
+            (when reschedule-days
+              (setq c (plist-put c :reschedule-days reschedule-days)))
             ;; Convert RESET_TIME to :from
             (when reset-time
               (setq c (plist-put c :from reset-time)))
@@ -149,9 +188,12 @@ Also builds and stores a config plist in the configs slot for uniformity."
                    :start-time nil
                    :reset-time reset-time
                    :only-days only-days
+                   :reschedule-days reschedule-days
                    :window-specs window-specs-objects
                    :assessment-interval assessment-interval
+                   :reschedule-assessment-interval reschedule-assessment-interval
                    :reschedule-interval reschedule-interval
+                   :reschedule-threshold reschedule-threshold
                    :done-times done-times-vector
                    :max-repetitions-per-interval max-repetitions-per-interval
                    :configs (list config))))
