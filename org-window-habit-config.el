@@ -211,17 +211,13 @@ Returns nil if the oldest config has no :from (unbounded past)."
 
 ;;; Migration utilities
 
-;;;###autoload (autoload 'org-window-habit-migrate-to-config "org-window-habit" nil t)
-(defun org-window-habit-migrate-to-config ()
-  "Migrate current habit's scattered properties to unified CONFIG property.
+(defun org-window-habit-config-from-properties ()
+  "Build a config plist from the legacy habit properties at point.
 Reads WINDOW_DURATION/REPETITIONS_REQUIRED or WINDOW_SPECS,
 ASSESSMENT_INTERVAL, RESCHEDULE_ASSESSMENT_INTERVAL, RESCHEDULE_INTERVAL,
 RESCHEDULE_THRESHOLD, MAX_REPETITIONS_PER_INTERVAL, ONLY_DAYS,
-RESCHEDULE_DAYS, and RESET_TIME properties, builds a unified config
-plist, and writes it to the CONFIG property.
-
-If RESET_TIME exists, it's converted to :from on the config."
-  (interactive)
+RESCHEDULE_DAYS, and RESET_TIME, which becomes :from.  Only properties
+that are set are included; defaults apply when the config is used."
   (let* ((window-specs-str (org-window-habit-entry-get "WINDOW_SPECS"))
          (window-duration (org-window-habit-entry-get "WINDOW_DURATION"))
          (reps-required (org-window-habit-entry-get "REPETITIONS_REQUIRED"))
@@ -277,10 +273,16 @@ If RESET_TIME exists, it's converted to :from on the config."
     ;; Convert RESET_TIME to :from
     (when reset-time-str
       (setq config (plist-put config :from reset-time-str)))
-    ;; Write CONFIG property
-    (org-entry-put nil (org-window-habit-property "CONFIG")
-                   (prin1-to-string config))
-    (message "Migrated habit to CONFIG property")))
+    config))
+
+;;;###autoload (autoload 'org-window-habit-migrate-to-config "org-window-habit" nil t)
+(defun org-window-habit-migrate-to-config ()
+  "Migrate current habit's scattered properties to unified CONFIG property.
+The config is built by `org-window-habit-config-from-properties'."
+  (interactive)
+  (org-entry-put nil (org-window-habit-property "CONFIG")
+                 (prin1-to-string (org-window-habit-config-from-properties)))
+  (message "Migrated habit to CONFIG property"))
 
 ;;;###autoload (autoload 'org-window-habit-migrate-buffer "org-window-habit" nil t)
 (defun org-window-habit-migrate-buffer ()

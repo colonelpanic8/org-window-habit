@@ -23,20 +23,13 @@
 
 ;;; Code:
 
-(require 'eieio)
-(require 'cl-lib)
 (require 'org)
-(require 'org-window-habit-time)
 (require 'org-window-habit-config)
+(require 'org-window-habit-core)
 (require 'org-window-habit-logbook)
 
 ;; Forward declarations
-(declare-function org-window-habit-property "org-window-habit")
 (declare-function org-window-habit-entry-get "org-window-habit")
-
-;; Forward declarations for classes
-(defvar org-window-habit)
-(defvar org-window-habit-window-spec)
 
 
 ;;; Instance creation from org entry
@@ -66,164 +59,30 @@ entry's config is inactive at TIME."
   "Create habit instance from CONFIG-STR with DONE-TIMES-VECTOR.
 CONFIG-STR is the value of the CONFIG property (single or versioned config).
 TIME defaults to the current time.  Return nil when no config is active then."
-  (let* ((configs (org-window-habit-parse-config config-str))
-         (config (org-window-habit-get-config-for-time
-                  configs (or time (current-time)))))
-    (when config
-      (org-window-habit--make-instance-for-config
-       configs config done-times-vector time))))
+  (org-window-habit--create-instance-from-configs
+   (org-window-habit-parse-config config-str) done-times-vector time))
 
 (defun org-window-habit-create-instance-from-scattered-properties
     (done-times-vector &optional time)
   "Create habit instance from scattered properties with DONE-TIMES-VECTOR.
-This is the backwards-compatible path for habits without CONFIG property.
-Also builds and stores a config plist in the configs slot for uniformity.
-TIME defaults to the current time."
-  (let* ((assessment-interval-str
-          (org-window-habit-entry-get "ASSESSMENT_INTERVAL"))
-         (assessment-interval
-          (org-window-habit-string-duration-to-plist
-           assessment-interval-str :default '(:days 1)))
-         (reschedule-interval-str
-          (org-window-habit-entry-get "RESCHEDULE_INTERVAL"))
-         (reschedule-interval
-          (org-window-habit-string-duration-to-plist
-           reschedule-interval-str :default '(:days 1)))
-         (reschedule-assessment-interval-str
-          (org-window-habit-entry-get "RESCHEDULE_ASSESSMENT_INTERVAL"))
-         (reschedule-assessment-interval
-          (org-window-habit-string-duration-to-plist
-           reschedule-assessment-interval-str :default '(:days 1)))
-         (reschedule-threshold-str
-          (org-window-habit-entry-get "RESCHEDULE_THRESHOLD"))
-         (reschedule-threshold
-          (if reschedule-threshold-str
-              (string-to-number reschedule-threshold-str)
-            1.0))
-         (max-reps-str
-          (org-window-habit-entry-get "MAX_REPETITIONS_PER_INTERVAL"))
-         (max-repetitions-per-interval
-          (string-to-number (or max-reps-str "1")))
-         (reset-time-str
-          (org-window-habit-entry-get "RESET_TIME"))
-         (reset-time
-          (when reset-time-str
-            (org-time-string-to-time reset-time-str)))
-         (only-days-str
-          (org-window-habit-entry-get "ONLY_DAYS"))
-         (only-days
-          (org-window-habit-parse-only-days only-days-str))
-         (reschedule-days-str
-          (org-window-habit-entry-get "RESCHEDULE_DAYS"))
-         (reschedule-days
-          (org-window-habit-parse-only-days reschedule-days-str))
-         (window-specs-objects
-          (or (org-window-habit-create-specs)
-              (org-window-habit-create-specs-from-perfect-okay)))
-         ;; Build window-specs as plists for the config
-         (window-specs-plists
-          (org-window-habit-build-window-specs-plists-from-properties))
-         ;; Build the config plist - only include non-default values
-         (config
-          (let ((c (list :window-specs window-specs-plists)))
-            ;; Only add :assessment-interval if explicitly set
-            (when assessment-interval-str
-              (setq c (plist-put c :assessment-interval
-                                 (org-window-habit-string-duration-to-plist
-                                  assessment-interval-str))))
-            ;; Only add :reschedule-assessment-interval if explicitly set
-            (when reschedule-assessment-interval-str
-              (setq c (plist-put
-                       c :reschedule-assessment-interval
-                       reschedule-assessment-interval)))
-            ;; Only add :reschedule-interval if explicitly set
-            (when reschedule-interval-str
-              (setq c (plist-put c :reschedule-interval reschedule-interval)))
-            ;; Only add :reschedule-threshold if explicitly set
-            (when reschedule-threshold-str
-              (setq c (plist-put c :reschedule-threshold
-                                 reschedule-threshold)))
-            ;; Only add :max-reps-per-interval if explicitly set (and not "1")
-            (when (and max-reps-str (not (string= max-reps-str "1")))
-              (setq c (plist-put c :max-reps-per-interval max-repetitions-per-interval)))
-            ;; Only add :only-days if set
-            (when only-days
-              (setq c (plist-put c :only-days only-days)))
-            ;; Only add :reschedule-days if set
-            (when reschedule-days
-              (setq c (plist-put c :reschedule-days reschedule-days)))
-            ;; Convert RESET_TIME to :from
-            (when reset-time
-              (setq c (plist-put c :from reset-time)))
-            c)))
-    (org-window-habit-for-time
-     (make-instance 'org-window-habit
-                    :start-time nil
-                    :reset-time reset-time
-                    :only-days only-days
-                    :reschedule-days reschedule-days
-                    :window-specs window-specs-objects
-                    :assessment-interval assessment-interval
-                    :reschedule-assessment-interval reschedule-assessment-interval
-                    :reschedule-interval reschedule-interval
-                    :reschedule-threshold reschedule-threshold
-                    :done-times done-times-vector
-                    :max-repetitions-per-interval max-repetitions-per-interval
-                    :configs (list config)
-                    :active-config config)
-     time)))
+This is the backwards-compatible path for habits without CONFIG property;
+the properties are converted with `org-window-habit-config-from-properties'.
+TIME defaults to the current time.  Return nil when the habit is inactive
+then."
+  (org-window-habit--create-instance-from-configs
+   (org-window-habit-chain-config-dates
+    (list (org-window-habit-config-from-properties)))
+   done-times-vector time))
 
-(defun org-window-habit-build-window-specs-plists-from-properties ()
-  "Build window-specs as plists from current heading's scattered properties.
-Returns a list of plists suitable for storing in a config."
-  (let ((spec-text (org-window-habit-entry-get "WINDOW_SPECS")))
-    (if spec-text
-        ;; WINDOW_SPECS is already in plist format
-        (car (read-from-string spec-text))
-      ;; Build from WINDOW_DURATION and REPETITIONS_REQUIRED
-      (let ((window-length
-             (org-window-habit-string-duration-to-plist
-              (org-window-habit-entry-get "WINDOW_DURATION") :default '(:days 1)))
-            (repetitions-required
-             (string-to-number
-              (or (org-window-habit-entry-get "REPETITIONS_REQUIRED") "1"))))
-        (list (list :duration window-length
-                    :repetitions repetitions-required))))))
-
-(defun org-window-habit-create-specs ()
-  "Parse WINDOW_SPECS property into a list of window-spec objects.
-Returns nil if the property is not set."
-  (let ((spec-text (org-window-habit-entry-get "WINDOW_SPECS")))
-    (when spec-text
-      (cl-loop for args in (car (read-from-string spec-text))
-               collect (apply #'make-instance 'org-window-habit-window-spec args)))))
-
-(defun org-window-habit-create-specs-from-perfect-okay ()
-  "Create a single window-spec from WINDOW_DURATION and REPETITIONS_REQUIRED.
-This is the simple configuration format for habits with one evaluation window."
-  (let*
-      ((window-length
-        (org-window-habit-string-duration-to-plist
-         (org-window-habit-entry-get "WINDOW_DURATION") :default '(:days 1)))
-       (repetitions-required
-        (string-to-number
-         (or (org-window-habit-entry-get "REPETITIONS_REQUIRED") "1"))))
-    (list
-     (make-instance
-      'org-window-habit-window-spec
-      :duration window-length
-      :repetitions repetitions-required
-      ;; Default conforming-value of 1.0 gives this spec full weight in aggregation
-      :value 1.0))))
-
-
-;;; Utility function also used elsewhere
-
-(defun org-window-habit-parse-only-days (str)
-  "Parse ONLY_DAYS property string STR into a list of day symbols.
-STR should be a Lisp list like (:monday :wednesday :friday)."
-  (when str
-    (car (read-from-string str))))
+(defun org-window-habit--create-instance-from-configs
+    (configs done-times-vector &optional time)
+  "Create a habit instance from parsed CONFIGS with DONE-TIMES-VECTOR.
+TIME defaults to the current time.  Return nil when no config is active then."
+  (let ((config (org-window-habit-get-config-for-time
+                 configs (or time (current-time)))))
+    (when config
+      (org-window-habit--make-instance-for-config
+       configs config done-times-vector time))))
 
 (provide 'org-window-habit-instance)
 ;;; org-window-habit-instance.el ends here
