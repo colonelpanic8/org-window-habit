@@ -107,5 +107,17 @@ Answer any note prompt and return the entry text afterwards."
       (should (string-match-p "CLOSING NOTE" entry))
       (should (owh-test--deadline-in-days-p entry 7)))))
 
+(ert-deftest owh-test-completion-without-logging-reschedules-and-warns ()
+  "An unlogged completion still reschedules but warns that it is not counted."
+  (dolist (log-done '(time nil))
+    (let* ((warnings nil)
+           (entry (cl-letf (((symbol-function 'display-warning)
+                             (lambda (_type message &rest _)
+                               (push message warnings))))
+                    (owh-test--complete-weekly-habit log-done nil))))
+      (should (owh-test--deadline-in-days-p entry 7))
+      (should (= (length warnings) 1))
+      (should (string-match-p "not logged" (car warnings))))))
+
 (provide 'org-window-habit-advice-test)
 ;;; org-window-habit-advice-test.el ends here

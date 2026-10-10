@@ -64,10 +64,18 @@ ORIG is the original function, ARGS are its arguments."
 
 ;;; Auto-repeat functionality
 
-(defun org-window-habit-auto-repeat (&rest _args)
-  "Reassign the date of the habit to the next day at which it is required."
+(defun org-window-habit-auto-repeat (&optional extra-done-time)
+  "Reassign the date of the habit to the next day at which it is required.
+EXTRA-DONE-TIME, when non-nil, is treated as an additional completion."
   (interactive)
   (let* ((habit (org-window-habit-create-instance-from-heading-at-point))
+         (habit (if (and habit extra-done-time)
+                    (org-window-habit--copy-with-done-times
+                     habit
+                     (vconcat (sort (cons extra-done-time
+                                          (append (oref habit done-times) nil))
+                                    (lambda (a b) (time-less-p b a)))))
+                  habit))
          (required-interval-start
           (when habit
             (org-window-habit-get-next-required-interval habit))))
@@ -101,10 +109,22 @@ ORIG is the original function, ARGS are its arguments."
 			(substring org-last-inserted-timestamp -1))))))
 
 (defun org-window-habit-auto-repeat-maybe-advice (orig &rest args)
-  "Advice for habit auto-repeat.  Calls ORIG with ARGS, then triggers rescheduling."
+  "Advice for `org-auto-repeat-maybe'.  Call ORIG with ARGS, then reschedule.
+When Org is about to log the completion, rescheduling is left to
+`org-window-habit-store-log-note-advice' so that it sees the new entry.
+Otherwise the completion is never recorded: reschedule as if it were
+and warn."
   (let ((res (apply orig args)))
-    (when (and org-window-habit-mode (org-is-habit-p))
-      (apply #'org-window-habit-auto-repeat args))
+    (when (and org-window-habit-mode (org-is-habit-p) (not org-log-setup))
+      (if (member (car args) org-done-keywords)
+          (progn
+            (display-warning
+             'org-window-habit
+             (format "Completion of \"%s\" was not logged and will not be counted; \
+set `org-log-repeat' to record habit completions"
+                     (org-get-heading t t t t)))
+            (org-window-habit-auto-repeat (current-time)))
+        (org-window-habit-auto-repeat)))
     res))
 
 (defun org-window-habit-store-log-note-advice (orig &rest args)
