@@ -38,7 +38,7 @@
 (defvar org-window-habit-completion-needed-today-glyph)
 (defvar org-window-habit-completed-glyph)
 (defvar org-window-habit-preceding-intervals)
-(defvar org-window-habit-following-days)
+(defvar org-window-habit-following-intervals)
 (defvar org-window-habit-graph-assessment-fn)
 (defvar org-window-habit-show-streak)
 (defvar org-window-habit-streak-format)
@@ -273,7 +273,7 @@ Return nil when HABIT is inactive at NOW."
                                  completion-in-interval-count 'present habit
                                  (oref (car iterators) window)))
                        (cl-loop
-                        for i from 1 to org-window-habit-following-days
+                        for i from 1 to org-window-habit-following-intervals
                         do
                         (cl-loop for iterator in iterators
                                  do (org-window-habit-advance iterator))

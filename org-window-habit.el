@@ -112,12 +112,15 @@
   :type 'function)
 
 (defcustom org-window-habit-preceding-intervals 21
-  "Number of days before today to appear in consistency graphs."
+  "Number of assessment intervals before the current one shown in graphs."
   :group 'org-window-habit
   :type 'integer)
 
-(defcustom org-window-habit-following-days 4
-  "Number of days after today to appear in consistency graphs."
+(define-obsolete-variable-alias 'org-window-habit-following-days
+  'org-window-habit-following-intervals "0.1.4")
+
+(defcustom org-window-habit-following-intervals 4
+  "Number of assessment intervals after the current one shown in graphs."
   :group 'org-window-habit
   :type 'integer)
 

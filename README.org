@@ -356,8 +356,8 @@ Key customizable variables (=M-x customize-group RET org-window-habit=):
 | Variable                                         | Default     | Description                        |
 |--------------------------------------------------+-------------+------------------------------------|
 | =org-window-habit-property-prefix=               | ="OWH"=     | Prefix for org properties          |
-| =org-window-habit-preceding-intervals=           | =21=        | Days of history shown in graph     |
-| =org-window-habit-following-days=                | =4=         | Days of future projection in graph |
+| =org-window-habit-preceding-intervals=           | =21=        | Past intervals shown in graph      |
+| =org-window-habit-following-intervals=           | =4=         | Future intervals shown in graph    |
 | =org-window-habit-show-streak=                   | =t=         | Show current streak after graph    |
 | =org-window-habit-streak-format=                 | =" S%d"=    | Format for the streak indicator    |
 | =org-window-habit-streak-threshold=              | =1.0=       | Ratio required to extend streak    |
