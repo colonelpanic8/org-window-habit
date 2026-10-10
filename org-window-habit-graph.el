@@ -33,6 +33,7 @@
 (defvar org-window-habit-not-conforming-color)
 (defvar org-window-habit-required-completion-foreground-color)
 (defvar org-window-habit-non-required-completion-foreground-color)
+(defvar org-window-habit-graph-foreground-color)
 (defvar org-window-habit-non-conforming-scale)
 (defvar org-window-habit-completion-needed-today-glyph)
 (defvar org-window-habit-completed-glyph)
@@ -137,11 +138,13 @@ Returns (character face) or a list of such pairs for the present interval."
                  org-window-habit-completion-needed-today-glyph)
                 (t ?-)))
               (completion-face
-               (org-window-habit-create-face with-completion-color "#000000"))
+               (org-window-habit-create-face with-completion-color
+                                             org-window-habit-graph-foreground-color))
               (sample-face
                (if interval-has-completion
                    completion-face
-                 (org-window-habit-create-face without-completion-color "#000000"))))
+                 (org-window-habit-create-face without-completion-color
+                                               org-window-habit-graph-foreground-color))))
          (list
           (list ?| completion-face)
           (list character completion-face)
@@ -168,8 +171,7 @@ Returns (character face) or a list of such pairs for the present interval."
       ('future
        (let* ((bg-color
                without-completion-color)
-              (fg-color
-               "#000000")
+              (fg-color org-window-habit-graph-foreground-color)
               (face (org-window-habit-create-face bg-color fg-color))
               (character
                (cond

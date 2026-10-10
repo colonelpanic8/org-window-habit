@@ -73,7 +73,14 @@
   :type 'string)
 
 (defcustom org-window-habit-required-completion-today-foreground-color "#00FF00"
-  "Foreground color for indicating required completions for today."
+  "Unused; kept for compatibility."
+  :group 'org-window-habit
+  :type 'string)
+(make-obsolete-variable 'org-window-habit-required-completion-today-foreground-color
+                        'org-window-habit-graph-foreground-color "0.1.4")
+
+(defcustom org-window-habit-graph-foreground-color "#000000"
+  "Foreground color for the current and future intervals of graphs."
   :group 'org-window-habit
   :type 'string)
 
