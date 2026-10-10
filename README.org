@@ -177,6 +177,12 @@ This defines:
 3. =:from= is inclusive; =:until= is exclusive; omitted bounds are unbounded
 4. Matching adjacent bounds produce a continuous rule change; a gap between
    bounds makes the habit inactive during that period
+5. A version's start acts like a reset: completions logged before it do not
+   count toward that version's windows. Instead, the target is prorated
+   while only part of a window falls inside the version
+
+For example, in the workout example above, on June 3, 2024 only completions from
+June 1 onward count, against a prorated target of 5 × 3/7 ≈ 2.1.
 
 *With a gap (habit pause):*
 #+begin_src org
