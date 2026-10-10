@@ -37,7 +37,7 @@ For fixed-length intervals (days, hours), assessment boundaries are *anchored to
 
 This ensures consistent, predictable evaluation periods for each habit.
 
-The library tracks your completions and calculates a *conforming ratio* - are you on track to meet your goal? The agenda graph shows this visually, with colors indicating your conformity status (by default, green when conforming and red when falling behind).
+The library tracks your completions and calculates a *conforming ratio* - are you on track to meet your goal? The agenda graph shows this visually, with colors indicating your conformity status (by default, slate blue when conforming and red when falling behind).
 
 When you complete a habit, org-window-habit automatically reschedules it to the next date when a completion will be needed to maintain conformity, rather than using a fixed repeater interval.
 
@@ -331,12 +331,13 @@ Like =org-habit=, org-window-habit displays a consistency graph in the agenda. E
 - *Past intervals*: Show whether you were conforming (green) or not (red) at that time
 - *Current interval*: Shows whether you need to complete today:
   - =☐= (box) - Completion needed today to stay on track
-  - =✓= (checkmark) - Already completed today (or not needed)
+  - =✓= (checkmark) - Already completed today
+  - =-= (dash) - Not completed, but not needed today either
 - *Future intervals*: Project expected conformity based on current trajectory
 
-The colors indicate your conforming ratio:
-- Green shades: On track or ahead
-- Red shades: Falling behind on requirements
+The colors blend from =org-window-habit-not-conforming-color= (red by
+default) to =org-window-habit-conforming-color= (slate blue by default) as
+your conforming ratio rises.
 
 When =org-window-habit-show-streak= is non-nil, the graph also appends a
 compact =S<n>= indicator. This is the current streak: the number of
