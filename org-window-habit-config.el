@@ -38,31 +38,21 @@
 (defun org-window-habit-parse-config-date (date-value)
   "Parse DATE-VALUE into an Emacs time value.
 DATE-VALUE can be:
-- An org inactive timestamp: [2025-06-01] or [2025-06-01 Sun]
-- An org active timestamp: <2025-06-01>
-- A plain date string: \"2025-06-01\"
+- An org inactive timestamp: [2025-06-01] or [2025-06-01 Sun 10:00]
+- An org active timestamp: <2025-06-01> or <2025-06-01 Sun 10:00>
+- A plain date string: \"2025-06-01\" or \"2025-06-01 10:00\"
 - nil (returns nil)
-Returns a normalized Emacs time value at midnight."
+Values without a time of day resolve to midnight."
   (when date-value
-    (let* ((date-str
-            (cond
-             ;; Strip org timestamp brackets [...]
-             ((string-match "^\\[\\([0-9]+-[0-9]+-[0-9]+\\)\\( [A-Za-z]+\\)?\\]$" date-value)
-              (match-string 1 date-value))
-             ;; Strip org active timestamp brackets <...>
-             ((string-match "^<\\([0-9]+-[0-9]+-[0-9]+\\)\\( [A-Za-z]+\\)?>$" date-value)
-              (match-string 1 date-value))
-             ;; Plain date string
-             ((string-match "^[0-9]+-[0-9]+-[0-9]+$" date-value)
-              date-value)
-             (t (error "Invalid date format: %s" date-value))))
-           (parsed (parse-time-string date-str)))
-      ;; parse-time-string returns (SEC MIN HOUR DAY MON YEAR DOW DST TZ)
-      ;; Build a time at midnight
-      (encode-time 0 0 0
-                   (nth 3 parsed)   ; day
-                   (nth 4 parsed)   ; month
-                   (nth 5 parsed))))) ; year
+    (let ((date-str
+           (and (string-match
+                 "\\`\\(?:\\[\\(?1:[^]]*\\)\\]\\|<\\(?1:[^>]*\\)>\\|\\(?1:[^][<>]*\\)\\)\\'"
+                 date-value)
+                (match-string 1 date-value))))
+      (unless (and date-str
+                   (string-match-p "\\`[0-9]+-[0-9]+-[0-9]+\\(?: \\|\\'\\)" date-str))
+        (error "Invalid date format: %s" date-value))
+      (org-time-string-to-time date-str))))
 
 
 ;;; Config structure detection

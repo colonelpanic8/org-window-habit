@@ -39,6 +39,17 @@
     (should result)
     (should (owh-test-times-equal-p result (owh-test-make-time 2025 6 1 0 0 0)))))
 
+(ert-deftest owh-test-parse-config-date-with-time ()
+  "Test parsing dates that include a time of day."
+  (should (time-equal-p (org-window-habit-parse-config-date "[2025-06-01 Sun 10:30]")
+                        (owh-test-make-time 2025 6 1 10 30 0)))
+  (should (time-equal-p (org-window-habit-parse-config-date "<2025-06-01 Sun 10:30>")
+                        (owh-test-make-time 2025 6 1 10 30 0)))
+  (should (time-equal-p (org-window-habit-parse-config-date "2025-06-01 10:30")
+                        (owh-test-make-time 2025 6 1 10 30 0)))
+  (should-error (org-window-habit-parse-config-date "[2025-06-01 Sun>"))
+  (should-error (org-window-habit-parse-config-date "June 1")))
+
 (ert-deftest owh-test-parse-config-date-nil ()
   "Test parsing nil returns nil."
   (should (null (org-window-habit-parse-config-date nil))))
