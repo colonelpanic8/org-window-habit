@@ -108,7 +108,8 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 :END:
 #+end_src
 
-This defines a habit requiring 5 completions per 7-day window.
+This defines a habit requiring 5 completions per 7-day window. Org property
+values cannot span lines, so keep the whole plist on the =OWH_CONFIG= line.
 
 *With additional options:*
 #+begin_src org
@@ -291,11 +292,7 @@ This prevents both long gaps and insufficient frequency.
 *Example: Averaging multiple windows*
 #+begin_src org
 :PROPERTIES:
-:OWH_CONFIG: (:window-specs ((:duration (:days 2) :repetitions 1 :value 1.0)
-                             (:duration (:days 4) :repetitions 2 :value 1.0)
-                             (:duration (:days 8) :repetitions 4 :value 1.0))
-             :assessment-interval (:days 1)
-             :aggregation-fn org-window-habit-weighted-average-aggregation-fn)
+:OWH_CONFIG: (:window-specs ((:duration (:days 2) :repetitions 1 :value 1.0) (:duration (:days 4) :repetitions 2 :value 1.0) (:duration (:days 8) :repetitions 4 :value 1.0)) :assessment-interval (:days 1) :aggregation-fn org-window-habit-weighted-average-aggregation-fn)
 :END:
 #+end_src
 
@@ -405,9 +402,7 @@ SCHEDULED: <2024-01-15 Mon .+1d>
 SCHEDULED: <2024-01-22 Mon .+1d>
 :PROPERTIES:
 :STYLE: habit
-:OWH_CONFIG: (:window-specs ((:duration (:weeks 1 :start :monday) :repetitions 5))
-             :assessment-interval (:weeks 1 :start :monday)
-             :max-reps-per-interval 5)
+:OWH_CONFIG: (:window-specs ((:duration (:weeks 1 :start :monday) :repetitions 5)) :assessment-interval (:weeks 1 :start :monday) :max-reps-per-interval 5)
 :END:
 #+end_src
 
