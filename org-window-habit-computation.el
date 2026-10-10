@@ -459,9 +459,11 @@ Return nil when HABIT is inactive at TIME."
                  for window = (oref iterator window)
                  for conforming-ratio =
                  (org-window-habit-conforming-ratio iterator)
-                 for start-index = (oref iterator start-index)
-                 for end-index = (oref iterator end-index)
-                 for completions = (- end-index start-index)
+                 for completions = (org-window-habit-get-completion-count
+                                    habit
+                                    (oref window start-time)
+                                    (oref window end-time)
+                                    :start-index (oref iterator start-index))
                  collect `(("conformingRatio" . ,conforming-ratio)
                            ("completionsInWindow" . ,completions)
                            ("targetRepetitions" .

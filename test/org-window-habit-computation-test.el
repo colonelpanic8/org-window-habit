@@ -131,6 +131,21 @@
       (should (= (cdr (assoc "completionsInWindow" first-spec)) 3))
       (should (= aggregated 1.0)))))
 
+(ert-deftest owh-test-window-specs-status-counts-like-conforming-ratio ()
+  "completionsInWindow applies the same caps and filters as the ratio."
+  (let* ((now (owh-test-make-time 2025 3 10 12 0 0))
+         (habit (org-window-habit-create-instance-from-config
+                 "(:window-specs ((:duration (:days 7) :repetitions 3)) :from \"2025-03-06\")"
+                 (vector (owh-test-make-time 2025 3 9 10 0 0)
+                         (owh-test-make-time 2025 3 9 9 0 0)
+                         (owh-test-make-time 2025 3 8 10 0 0)
+                         (owh-test-make-time 2025 3 5 10 0 0))
+                 now))
+         (spec-status (car (cdr (assoc "windowSpecsStatus"
+                                       (org-window-habit-get-window-specs-status
+                                        habit now))))))
+    (should (= (cdr (assoc "completionsInWindow" spec-status)) 2))))
+
 ;;; ==========================================================================
 ;;; Future Required Intervals Tests (Prospective Scheduling)
 ;;; ==========================================================================
