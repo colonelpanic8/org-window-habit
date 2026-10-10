@@ -314,8 +314,9 @@ Later windows then contain no completions, so their ratios cannot change."
   "Find the next time when HABIT will need a completion.
 Searches forward from NOW until the conforming ratio drops below
 reschedule-threshold.  Respects reschedule-days and only-days restrictions.
-Return nil when HABIT is inactive at NOW or becomes inactive before a
-completion is required."
+When the next allowed day falls in a later config version, the search
+continues under that version.  Return nil when HABIT is inactive at NOW
+or becomes inactive before a completion is required."
   (setq now (or now (current-time)))
   (let ((active-habit (org-window-habit-for-time habit now)))
     (when active-habit
@@ -367,12 +368,19 @@ completion is required."
                                 candidate-time
                                 (org-window-habit-effective-reschedule-days
                                  only-days reschedule-days))))
-                          (when (eq (oref candidate-habit active-config)
-                                    (org-window-habit-get-config-for-time
-                                     (oref habit configs) allowed-time))
-                            (setq result allowed-time))
-                          (unless result
-                            (setq candidate-time nil)))
+                          (let ((allowed-config
+                                 (org-window-habit-get-config-for-time
+                                  (oref habit configs) allowed-time)))
+                            (cond
+                             ((eq (oref candidate-habit active-config)
+                                  allowed-config)
+                              (setq result allowed-time))
+                             ;; The allowed day is in a later version; search from its start.
+                             (allowed-config
+                              (setq candidate-time
+                                    (or (plist-get allowed-config :from)
+                                        allowed-time)))
+                             (t (setq candidate-time nil)))))
                       (setq candidate-time
                             (unless (org-window-habit--windows-past-completions-p
                                      iterators
