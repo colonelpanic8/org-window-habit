@@ -253,10 +253,11 @@ ARGS are passed to the conforming ratio calculation."
   ((habit org-window-habit) &optional time threshold)
   "Return HABIT's consecutive conforming assessment intervals at TIME.
 TIME defaults to the current time.  THRESHOLD defaults to 1.0.
-The current interval counts if its aggregate conforming ratio is at
-least THRESHOLD, and the scan continues backward until the first
-non-conforming interval or the active config's start.  Return nil when
-HABIT is inactive at TIME."
+An interval conforms if its aggregate conforming ratio is at least
+THRESHOLD.  The current interval counts if it conforms; otherwise, as it
+is still in progress, counting starts from the previous interval.  The
+scan continues backward until the first non-conforming interval or the
+active config's start.  Return nil when HABIT is inactive at TIME."
   (setq time (or time (current-time)))
   (setq threshold (or threshold 1.0))
   (let ((active-habit (org-window-habit-for-time habit time)))
@@ -275,6 +276,16 @@ HABIT is inactive at TIME."
                (or (plist-get (oref habit active-config) :from) start-time))
               (streak 0)
               (keep-scanning t))
+          ;; The current interval is still in progress, so falling short
+          ;; in it does not end the streak yet.
+          (when (and (time-less-p streak-start-time
+                                  (oref (oref (car iterators) window)
+                                        assessment-end-time))
+                     (< (org-window-habit-assess-interval habit iterators)
+                        threshold))
+            (cl-loop for iterator in iterators
+                     do (org-window-habit-advance
+                         iterator :amount assessment-decrement-plist)))
           (while keep-scanning
             (let* ((window (oref (car iterators) window))
                    (assessment-end (oref window assessment-end-time)))

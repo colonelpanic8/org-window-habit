@@ -116,9 +116,10 @@
 
 (defcustom org-window-habit-show-streak t
   "Whether to append the current conformity streak to consistency graphs.
-The streak is the number of consecutive assessment intervals ending at
-the current interval whose aggregate conforming ratio is at least
-`org-window-habit-streak-threshold'."
+The streak is the number of consecutive assessment intervals whose
+aggregate conforming ratio is at least `org-window-habit-streak-threshold',
+ending at the current interval, or at the previous one while the current
+interval is not yet conforming."
   :group 'org-window-habit
   :type 'boolean)
 

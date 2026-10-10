@@ -240,5 +240,23 @@
                 habit (owh-test-make-time 2024 1 16 12 0 0))
                0))))
 
+(ert-deftest owh-test-current-streak-ignores-unfinished-current-interval ()
+  "An unfinished current interval does not reset the streak."
+  (let ((today (owh-test-make-time 2025 3 10 12 0 0)))
+    (cl-flet ((daily-habit (days-ago)
+                (owh-test-make-habit
+                 (list (make-instance 'org-window-habit-window-spec
+                                      :duration '(:days 1) :repetitions 1))
+                 (mapcar (lambda (n) (owh-test-make-time 2025 3 (- 10 n) 9 0 0))
+                         days-ago))))
+      ;; Done each of the previous five days, not yet today.
+      (should (= (org-window-habit-current-streak
+                  (daily-habit '(1 2 3 4 5)) today)
+                 5))
+      ;; Missed yesterday as well.
+      (should (= (org-window-habit-current-streak
+                  (daily-habit '(2 3 4 5)) today)
+                 0)))))
+
 (provide 'org-window-habit-meta-test)
 ;;; org-window-habit-meta-test.el ends here

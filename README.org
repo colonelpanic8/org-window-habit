@@ -331,8 +331,10 @@ The colors indicate your conforming ratio:
 
 When =org-window-habit-show-streak= is non-nil, the graph also appends a
 compact =S<n>= indicator. This is the current streak: the number of
-consecutive assessment intervals, ending with the current interval, whose
-aggregate conforming ratio is at least =org-window-habit-streak-threshold=.
+consecutive assessment intervals whose aggregate conforming ratio is at
+least =org-window-habit-streak-threshold=. The current interval is
+included once it conforms; until then it is still in progress and the
+streak counts back from the previous interval.
 For a weekly 5-of-7 habit with a weekly assessment interval, =S3= means
 three consecutive conforming weeks. For a rolling daily assessment, it means
 consecutive conforming days.
