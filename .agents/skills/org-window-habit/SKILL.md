@@ -36,8 +36,7 @@ Use these patterns as starting points.
 Require three completions in the trailing seven days and reassess daily:
 
 ```org
-:CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3))
-         :assessment-interval (:days 1))
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)) :assessment-interval (:days 1))
 ```
 
 At each daily assessment, look back seven days. Completing early builds buffer; the next reminder appears when the ratio is projected to fall below the threshold.
@@ -47,10 +46,7 @@ At each daily assessment, look back seven days. Completing early builds buffer; 
 Require five completions in each Monday-to-Monday week, count streaks weekly, but check daily for the next reminder:
 
 ```org
-:CONFIG: (:window-specs ((:duration (:weeks 1 :start :monday) :repetitions 5))
-         :assessment-interval (:weeks 1 :start :monday)
-         :reschedule-assessment-interval (:days 1)
-         :max-reps-per-interval 5)
+:OWH_CONFIG: (:window-specs ((:duration (:weeks 1 :start :monday) :repetitions 5)) :assessment-interval (:weeks 1 :start :monday) :reschedule-assessment-interval (:days 1) :max-reps-per-interval 5)
 ```
 
 Set `:max-reps-per-interval` above the default `1` here because the assessment bucket is a whole week and up to five completions must count inside it.
@@ -62,8 +58,7 @@ Use `(:months 1)` for calendar months and `(:weeks 1 :start :DAY)` for calendar 
 Prevent both long gaps and low overall frequency:
 
 ```org
-:CONFIG: (:window-specs ((:duration (:days 4) :repetitions 1)
-                         (:duration (:days 10) :repetitions 4)))
+:OWH_CONFIG: (:window-specs ((:duration (:days 4) :repetitions 1) (:duration (:days 10) :repetitions 4)))
 ```
 
 By default, aggregate multiple specs with the minimum conforming ratio, so every spec must be satisfied. Use `org-window-habit-weighted-average-aggregation-fn` only when tradeoffs between specs are intentional; assign numeric `:value` weights to the specs.
@@ -73,15 +68,13 @@ By default, aggregate multiple specs with the minimum conforming ratio, so every
 Use `:only-days` to decide which completion days count. It also supplies reminder days when `:reschedule-days` is absent:
 
 ```org
-:CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3))
-         :only-days (:monday :wednesday :friday))
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)) :only-days (:monday :wednesday :friday))
 ```
 
 Use `:reschedule-days` when completions on all days should count but reminders should appear only on selected days:
 
 ```org
-:CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3))
-         :reschedule-days (:monday :tuesday :wednesday :thursday :friday))
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)) :reschedule-days (:monday :tuesday :wednesday :thursday :friday))
 ```
 
 When both are present, keep `:reschedule-days` within `:only-days`.
@@ -113,7 +106,7 @@ Prefer the unified config for new habits. Continue to support legacy scattered p
 
 ## Configure the unified property
 
-Use a Lisp plist as the property value. Keep durations in plist form inside unified configs, such as `(:days 7)`, `(:hours 8)`, `(:months 1)`, or `(:weeks 1 :start :monday)`.
+Use a Lisp plist as the property value and keep it on the property line: Org property values cannot span lines, and a value split across lines is ignored. Keep durations in plist form inside unified configs, such as `(:days 7)`, `(:hours 8)`, `(:months 1)`, or `(:weeks 1 :start :monday)`.
 
 ### Habit-level keys
 
@@ -141,9 +134,7 @@ Use a Lisp plist as the property value. Keep durations in plist form inside unif
 Use the default aggregation unless the user explicitly wants averaging. When using weighted averaging, pair it with numeric spec values:
 
 ```org
-:CONFIG: (:window-specs ((:duration (:days 2) :repetitions 1 :value 1.0)
-                         (:duration (:days 8) :repetitions 4 :value 2.0))
-         :aggregation-fn org-window-habit-weighted-average-aggregation-fn)
+:OWH_CONFIG: (:window-specs ((:duration (:days 2) :repetitions 1 :value 1.0) (:duration (:days 8) :repetitions 4 :value 2.0)) :aggregation-fn org-window-habit-weighted-average-aggregation-fn)
 ```
 
 ## Reason about counting and boundaries
@@ -173,21 +164,17 @@ Accept `"YYYY-MM-DD"`, `"[YYYY-MM-DD Day]"`, or `"<YYYY-MM-DD Day>"`, and preser
 For a continuous rule change on June 1, use matching bounds:
 
 ```org
-:CONFIG: ((:from "2026-06-01"
-          :window-specs ((:duration (:days 7) :repetitions 5)))
-         (:until "2026-06-01"
-          :window-specs ((:duration (:days 7) :repetitions 3))))
+:OWH_CONFIG: ((:from "2026-06-01" :window-specs ((:duration (:days 7) :repetitions 5))) (:until "2026-06-01" :window-specs ((:duration (:days 7) :repetitions 3))))
 ```
 
-The parser can infer a newer `:from` from an adjacent older `:until` in a simple chain, but prefer explicit paired bounds when directly editing data. Avoid overlaps and keep versions newest first.
+The parser infers a newer version's missing `:from` from the adjacent older version's `:until`, but prefer explicit paired bounds when directly editing data. Avoid overlaps and keep versions newest first.
 
 ## Pause and resume
 
 Pause an active single-config habit at date `P` by adding `:until P`. Preserve the configuration as history; no config is active at or after `P`:
 
 ```org
-:CONFIG: (:window-specs ((:duration (:days 7) :repetitions 2))
-         :until "2026-05-21")
+:OWH_CONFIG: (:window-specs ((:duration (:days 7) :repetitions 2)) :until "2026-05-21")
 ```
 
 Pause an already-versioned habit by adding `:until P` to the newest currently active plist without discarding older versions.
@@ -195,10 +182,7 @@ Pause an already-versioned habit by adding `:until P` to the newest currently ac
 Resume at date `R` by prepending a complete newest config with `:from R` and retaining `:until P` on the prior version:
 
 ```org
-:CONFIG: ((:from "2026-08-09"
-          :window-specs ((:duration (:days 7) :repetitions 2)))
-         (:until "2026-05-21"
-          :window-specs ((:duration (:days 7) :repetitions 2))))
+:OWH_CONFIG: ((:from "2026-08-09" :window-specs ((:duration (:days 7) :repetitions 2))) (:until "2026-05-21" :window-specs ((:duration (:days 7) :repetitions 2))))
 ```
 
 Interpret the gap `[P, R)` as inactive. If requirements change at resume, change the new first plist and preserve the historical plist.
