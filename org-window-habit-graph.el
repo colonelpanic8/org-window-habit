@@ -86,6 +86,21 @@ Colors should be hex strings like \"#RRGGBB\"."
 
 ;;; Default graph assessment function
 
+(defvar org-window-habit--graph-now nil
+  "Time the graph currently being built is assessed at.")
+
+(defvar org-window-habit--graph-next-required nil
+  "Cons of a habit and its next required time for the graph being built.")
+
+(defun org-window-habit-graph-next-required-interval (habit)
+  "Return HABIT's next required time as of the graph being built.
+Graph assessment functions should use this instead of calling
+`org-window-habit-get-next-required-interval' once per interval."
+  (if (eq (car org-window-habit--graph-next-required) habit)
+      (cdr org-window-habit--graph-next-required)
+    (org-window-habit-get-next-required-interval
+     habit org-window-habit--graph-now)))
+
 (cl-defun org-window-habit-default-graph-assessment-fn
     (without-completion-assessment-value
      with-completion-assessment-value
@@ -114,7 +129,8 @@ Returns (character face) or a list of such pairs for the present interval."
             without-completion-assessment-value)))
          (completion-today-matters
           (< without-completion-assessment-value with-completion-assessment-value))
-         (next-required-interval (org-window-habit-get-next-required-interval habit))
+         (next-required-interval
+          (org-window-habit-graph-next-required-interval habit))
          (completion-expected-today
           (and next-required-interval
                (org-window-habit-time-falls-in-assessment-interval
@@ -188,100 +204,103 @@ Return nil when HABIT is inactive at NOW."
      ((not (eq active-habit habit))
       (org-window-habit-build-graph active-habit now))
      (t
-      (with-slots
-      (assessment-decrement-plist window-specs reschedule-interval
-                                  max-repetitions-per-interval start-time aggregation-fn
-                                  assessment-interval graph-assessment-fn)
-      habit
-    (unless graph-assessment-fn
-      (setq graph-assessment-fn
-            org-window-habit-graph-assessment-fn))
-    (cl-destructuring-bind (actual-intervals actual-start-time)
-        ;; Find the start time by going back by the assessment interval
-        ;; `org-window-habit-preceding-intervals' times, or hitting the habits
-        ;; absolute start.
-        (cl-loop
-         with target-start-time = (org-window-habit-normalize-time-to-duration
-                                   now assessment-interval)
-         for i from 0 to org-window-habit-preceding-intervals
-         while (time-less-p start-time target-start-time)
-         do
-         (setq target-start-time
-               (org-window-habit-keyed-duration-add-plist
-                target-start-time
-                assessment-decrement-plist))
-         finally return (list i target-start-time))
-      (nconc
-       ;; Add filler if we don't have enough data to fill `org-window-habit-preceding-intervals'.
-       (cl-loop for i from 0 to (- org-window-habit-preceding-intervals actual-intervals)
-                collect (list ?\s 'default))
-       (cl-loop
-        with iterators =
-        (cl-loop for window-spec in window-specs
-                 collect
-                 (org-window-habit-iterator-from-time
-                  window-spec actual-start-time))
-        while (time-less-p (oref (oref (car iterators) window) assessment-end-time) now)
-        for
-        (_current-assessment-start
-         _current-assessment-end
-         no-completions-assessment
-         with-completions-assessment
-         completion-in-interval-count) =
-         (org-window-habit-assess-interval-with-and-without-completions
-          habit iterators (lambda (x) x))
-        collect
-        (funcall
-         graph-assessment-fn
-         no-completions-assessment
-         with-completions-assessment
-         completion-in-interval-count
-         'past
-         habit
-         (oref (car iterators) window))
-        into past-assessments
-        do
-        (cl-loop for iterator in iterators
-                 do (org-window-habit-advance iterator))
-        finally
-        return
-        (cl-destructuring-bind
-            (_current-assessment-start
-             _current-assessment-end
-             no-completions-assessment
-             with-completions-assessment
-             completion-in-interval-count)
-            (org-window-habit-assess-interval-with-and-without-completions
-             habit iterators (lambda (_x) max-repetitions-per-interval))
-          (nconc past-assessments
-                 ;; This is a hack to allow multi character stuff for the current day
-                 (org-window-habit-maybe-make-list-of-lists
-                  (funcall graph-assessment-fn no-completions-assessment
-                           with-completions-assessment
-                           completion-in-interval-count 'present habit
-                           (oref (car iterators) window)))
-                 (cl-loop
-                  for i from 1 to org-window-habit-following-days
-                  do
-                  (cl-loop for iterator in iterators
-                           do (org-window-habit-advance iterator))
-                  for
+      (let ((org-window-habit--graph-now now)
+            (org-window-habit--graph-next-required
+             (cons habit (org-window-habit-get-next-required-interval habit now))))
+        (with-slots
+            (assessment-decrement-plist window-specs reschedule-interval
+                                        max-repetitions-per-interval start-time aggregation-fn
+                                        assessment-interval graph-assessment-fn)
+            habit
+          (unless graph-assessment-fn
+            (setq graph-assessment-fn
+                  org-window-habit-graph-assessment-fn))
+          (cl-destructuring-bind (actual-intervals actual-start-time)
+              ;; Find the start time by going back by the assessment interval
+              ;; `org-window-habit-preceding-intervals' times, or hitting the habits
+              ;; absolute start.
+              (cl-loop
+               with target-start-time = (org-window-habit-normalize-time-to-duration
+                                         now assessment-interval)
+               for i from 0 to org-window-habit-preceding-intervals
+               while (time-less-p start-time target-start-time)
+               do
+               (setq target-start-time
+                     (org-window-habit-keyed-duration-add-plist
+                      target-start-time
+                      assessment-decrement-plist))
+               finally return (list i target-start-time))
+            (nconc
+             ;; Add filler if we don't have enough data to fill `org-window-habit-preceding-intervals'.
+             (cl-loop for i from 0 to (- org-window-habit-preceding-intervals actual-intervals)
+                      collect (list ?\s 'default))
+             (cl-loop
+              with iterators =
+              (cl-loop for window-spec in window-specs
+                       collect
+                       (org-window-habit-iterator-from-time
+                        window-spec actual-start-time))
+              while (time-less-p (oref (oref (car iterators) window) assessment-end-time) now)
+              for
+              (_current-assessment-start
+               _current-assessment-end
+               no-completions-assessment
+               with-completions-assessment
+               completion-in-interval-count) =
+              (org-window-habit-assess-interval-with-and-without-completions
+               habit iterators (lambda (x) x))
+              collect
+              (funcall
+               graph-assessment-fn
+               no-completions-assessment
+               with-completions-assessment
+               completion-in-interval-count
+               'past
+               habit
+               (oref (car iterators) window))
+              into past-assessments
+              do
+              (cl-loop for iterator in iterators
+                       do (org-window-habit-advance iterator))
+              finally
+              return
+              (cl-destructuring-bind
                   (_current-assessment-start
                    _current-assessment-end
                    no-completions-assessment
                    with-completions-assessment
-                   completion-in-interval-count) =
-                   (org-window-habit-assess-interval-with-and-without-completions
-                    habit iterators (lambda (_x) 0))
-                   collect
-                   (funcall
-                    graph-assessment-fn
-                    no-completions-assessment
-                    with-completions-assessment
-                    completion-in-interval-count
-                    'future
-                    habit
-                    (oref (car iterators) window)))))))))))))
+                   completion-in-interval-count)
+                  (org-window-habit-assess-interval-with-and-without-completions
+                   habit iterators (lambda (_x) max-repetitions-per-interval))
+                (nconc past-assessments
+                       ;; This is a hack to allow multi character stuff for the current day
+                       (org-window-habit-maybe-make-list-of-lists
+                        (funcall graph-assessment-fn no-completions-assessment
+                                 with-completions-assessment
+                                 completion-in-interval-count 'present habit
+                                 (oref (car iterators) window)))
+                       (cl-loop
+                        for i from 1 to org-window-habit-following-days
+                        do
+                        (cl-loop for iterator in iterators
+                                 do (org-window-habit-advance iterator))
+                        for
+                        (_current-assessment-start
+                         _current-assessment-end
+                         no-completions-assessment
+                         with-completions-assessment
+                         completion-in-interval-count) =
+                        (org-window-habit-assess-interval-with-and-without-completions
+                         habit iterators (lambda (_x) 0))
+                        collect
+                        (funcall
+                         graph-assessment-fn
+                         no-completions-assessment
+                         with-completions-assessment
+                         completion-in-interval-count
+                         'future
+                         habit
+                         (oref (car iterators) window))))))))))))))
 
 
 ;;; Graph rendering

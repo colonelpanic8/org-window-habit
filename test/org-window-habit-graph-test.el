@@ -75,5 +75,18 @@
                    '(face1 face2 face3)))
     (should (get-text-property 0 'org-window-habit-graph graph))))
 
+(ert-deftest owh-test-build-graph-marks-required-interval-as-of-now ()
+  "The present interval shows a needed completion relative to NOW."
+  (let* ((now (owh-test-make-time 2025 3 8 12 0 0))
+         (habit (org-window-habit-create-instance-from-config
+                 "(:window-specs ((:duration (:days 7) :repetitions 1)))"
+                 (vector (owh-test-make-time 2025 3 1 10 0 0))
+                 now))
+         (graph (org-window-habit-make-graph-string
+                 (org-window-habit-build-graph habit now))))
+    (should (string-match "|\\(.\\)" graph))
+    (should (eq (string-to-char (match-string 1 graph))
+                org-window-habit-completion-needed-today-glyph))))
+
 (provide 'org-window-habit-graph-test)
 ;;; org-window-habit-graph-test.el ends here
