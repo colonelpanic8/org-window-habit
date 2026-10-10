@@ -30,13 +30,29 @@
                 #'org-habit-get-priority))))
 
 (ert-deftest owh-test-org-window-habit-get-urgency-advice-uses-default-priority ()
-  "Window habits should bypass Org's list-based urgency calculation."
+  "Inactive window habits (nil) bypass Org's list-based urgency calculation."
   (let ((org-window-habit-mode t)
         (org-default-priority 123))
     (should (= (org-window-habit-get-urgency-advice
                 (lambda (&rest _) (ert-fail "Advice should not call ORIG"))
-                'dummy-habit)
+                nil)
                123))))
+
+(ert-deftest owh-test-urgency-grows-with-lateness-and-nonconformity ()
+  "Urgency rises as a required completion becomes overdue."
+  (let* ((habit (owh-test-make-habit
+                 (list (make-instance 'org-window-habit-window-spec
+                                      :duration '(:days 3) :repetitions 1))
+                 (list (owh-test-make-time 2025 3 1 10 0 0))))
+         (at (lambda (day) (org-window-habit-urgency
+                            habit (owh-test-make-time 2025 3 day 12 0 0))))
+         (org-window-habit-mode t))
+    (should (< (funcall at 2) (funcall at 4)))
+    (should (< (funcall at 4) (funcall at 6)))
+    (should (= (org-window-habit-get-urgency-advice
+                (lambda (&rest _) (ert-fail "Advice should not call ORIG"))
+                habit (owh-test-make-time 2025 3 6 12 0 0))
+               (funcall at 6)))))
 
 (ert-deftest owh-test-org-window-habit-get-urgency-advice-delegates-when-disabled ()
   "When the mode is disabled, the wrapped Org function should run."

@@ -54,12 +54,39 @@ ORIG is the original function, ARGS are its arguments."
       (org-window-habit-insert-consistency-graphs)
     (apply orig args)))
 
+(defun org-window-habit-urgency (habit &optional moment)
+  "Return the agenda urgency of window HABIT at MOMENT.
+MOMENT defaults to the current time.  Like `org-habit-get-urgency', the
+base is 1000; add 10 for every day since the habit became due after its
+latest completion (subtracting for days until then) and up to 100 for
+how far the habit is below full conformity."
+  (setq moment (or moment (current-time)))
+  (let* ((ratio (org-window-habit-assess-interval
+                 habit
+                 (mapcar (lambda (spec)
+                           (org-window-habit-iterator-from-time spec moment))
+                         (oref habit window-specs))))
+         (latest-done
+          (cl-find-if (lambda (time)
+                        (org-window-habit-time-less-or-equal-p time moment))
+                      (oref habit done-times)))
+         (due (org-window-habit-get-next-required-interval
+               habit (or latest-done moment)))
+         (days-overdue (if due
+                           (- (time-to-days moment) (time-to-days due))
+                         0)))
+    (+ 1000
+       (* 10 days-overdue)
+       (round (* 100 (- 1.0 (min 1.0 (max 0.0 ratio))))))))
+
 (defun org-window-habit-get-urgency-advice (orig &rest args)
   "Advice for `org-habit-get-urgency' when window-habit mode is active.
 ORIG is the original function, ARGS are its arguments."
-  (if org-window-habit-mode
-      org-default-priority              ;TODO fix this
-    (apply orig args)))
+  (cond
+   ((not org-window-habit-mode) (apply orig args))
+   ((cl-typep (car args) 'org-window-habit)
+    (apply #'org-window-habit-urgency args))
+   (t org-default-priority)))
 
 
 ;;; Auto-repeat functionality
