@@ -90,10 +90,17 @@ Or install from git using =straight.el=:
 1. Create a TODO heading with =SCHEDULED= or =DEADLINE= that has any repeater (the repeater value doesn't matter - org-window-habit uses its own rescheduling logic, but a repeater must be present)
 2. Add =:STYLE: habit= under =:PROPERTIES:=
 3. Add the =OWH_CONFIG= property with your habit configuration
-4. Ensure Org is logging TODO state changes for the entry. =org-window-habit=
-   reads completion history from standard Org state-change logs whether they
-   are stored inline or inside a =LOGBOOK= drawer. Setting
+4. Ensure Org logs completions of repeating tasks. =org-window-habit= reads
+   completion history from standard Org state-change logs and closing notes,
+   whether they are stored inline or inside a =LOGBOOK= drawer. Setting
    =org-log-into-drawer= is optional.
+
+   Org logs a repeating task's completion only when =org-log-repeat= is
+   non-nil (the default is =time=) or the entry's =LOGGING= property or a
+   =#+STARTUP: logrepeat= line enables it. When a completion is not logged,
+   the habit is still rescheduled, but the completion is never counted and a
+   warning is shown. With =org-log-done= or =org-log-repeat= set to =note=,
+   rescheduling happens once the note is stored.
 
 *** Recommended: Unified CONFIG Property
 
