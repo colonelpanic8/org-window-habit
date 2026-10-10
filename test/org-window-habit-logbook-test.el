@@ -172,6 +172,7 @@ to the correct sorted position."
               ":LOGBOOK:\n"
               "- State \"DONE\"       from \"TODO\"       [2024-01-01 Mon 10:00] \\\\\n"
               "  backdated note\n"
+              "  - nested detail\n"
               "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00] \\\\\n"
               "  newest note\n"
               "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n"
@@ -185,6 +186,7 @@ to the correct sorted position."
                        "- State \"DONE\" +from \"TODO\" +\\[2024-01-10 Wed 10:00\\]\n"
                        "- State \"DONE\" +from \"TODO\" +\\[2024-01-01 Mon 10:00\\] \\\\\\\\\n"
                        "  backdated note\n"
+                       "  - nested detail\n"
                        ":END:")
                (buffer-string))))))
 

@@ -189,13 +189,16 @@ Returns a list of plists with :start, :end, :time, and :text properties."
 
 (defun org-window-habit--logbook-item-end (limit)
   "Return the end of the logbook item on the current line.
-The item includes following note lines up to the next list item or LIMIT."
+The item includes its note lines, including nested list items, up to the
+next item at the same or a lower indentation, or LIMIT."
   (save-excursion
-    (forward-line 1)
-    (while (and (< (point) limit)
-                (not (looking-at-p "[ \t]*- ")))
-      (forward-line 1))
-    (min (point) limit)))
+    (let ((indentation (current-indentation)))
+      (forward-line 1)
+      (while (and (< (point) limit)
+                  (not (and (looking-at-p "[ \t]*- ")
+                            (<= (current-indentation) indentation))))
+        (forward-line 1))
+      (min (point) limit))))
 
 (defun org-window-habit--move-entry-to-sorted-position (entry other-entries end-marker)
   "Move ENTRY to its correct sorted position among OTHER-ENTRIES.
