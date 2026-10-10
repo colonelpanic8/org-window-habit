@@ -853,5 +853,20 @@ When using min aggregation, extra credit on one spec won't help if another is lo
              (org-window-habit-get-next-required-interval habit now)
              (owh-test-make-time 2025 3 12 0 0 0)))))
 
+(ert-deftest owh-test-conforming-ratio-before-habit-start ()
+  "A window ending before the habit starts yields 0.0, not a negative ratio."
+  (let* ((habit (make-instance 'org-window-habit
+                               :window-specs
+                               (list (make-instance 'org-window-habit-window-spec
+                                                    :duration '(:days 7)
+                                                    :repetitions 3))
+                               :assessment-interval '(:days 1)
+                               :done-times (vector (owh-test-make-time 2025 3 9 10 0 0))
+                               :start-time (owh-test-make-time 2025 3 20 0 0 0)))
+         (iterator (org-window-habit-iterator-from-time
+                    (car (oref habit window-specs))
+                    (owh-test-make-time 2025 3 10 12 0 0))))
+    (should (eql (org-window-habit-conforming-ratio iterator) 0.0))))
+
 (provide 'org-window-habit-computation-test)
 ;;; org-window-habit-computation-test.el ends here

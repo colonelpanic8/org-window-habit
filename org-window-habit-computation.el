@@ -212,22 +212,27 @@ FILL-COMPLETIONS-FN allows modifying counts per interval (used for projections).
 ARGS are passed to the completion counting function.
 Returns completions / (scale * target * baseline), clamped to [0.0, max-ratio].
 A ratio of 1.0 means fully conforming; lower values indicate falling behind.
-Values above 1.0 represent extra credit when max-conforming-ratio > 1.0."
+Values above 1.0 represent extra credit when max-conforming-ratio > 1.0.
+A window that ends before the habit starts yields 0.0."
   (with-slots (window-spec window start-index) iterator
     (let ((baseline (oref window-spec conforming-baseline))
-          (max-ratio (oref window-spec max-conforming-ratio)))
-      (min
-       max-ratio
-       (/
-        (apply #'org-window-habit-get-completion-count
-               (oref window-spec habit)
-               (oref window start-time)
-               (oref window end-time)
-               :start-index start-index
-               args)
-        (* (org-window-habit-actual-window-scale iterator)
-           (oref window-spec target-repetitions)
-           baseline))))))
+          (max-ratio (oref window-spec max-conforming-ratio))
+          (scale (org-window-habit-actual-window-scale iterator)))
+      (if (<= scale 0)
+          0.0
+        (max 0.0
+             (min
+              max-ratio
+              (/
+               (apply #'org-window-habit-get-completion-count
+                      (oref window-spec habit)
+                      (oref window start-time)
+                      (oref window end-time)
+                      :start-index start-index
+                      args)
+               (* scale
+                  (oref window-spec target-repetitions)
+                  baseline))))))))
 
 (cl-defmethod org-window-habit-actual-window-scale
   ((iterator org-window-habit-iterator))
