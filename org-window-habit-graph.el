@@ -363,29 +363,28 @@ For habits assessed in whole days or longer, this honors
 
 (defun org-window-habit-insert-consistency-graphs (&optional line)
   "Insert consistency graph for any habitual tasks.
-If LINE is provided, insert graphs at beggining of line"
+If LINE is non-nil, start at the beginning of the current line instead
+of the beginning of the buffer."
   (let ((inhibit-read-only t)
-	(buffer-invisibility-spec '(org-link)))
+        (buffer-invisibility-spec '(org-link)))
     (save-excursion
       (goto-char (if line (line-beginning-position) (point-min)))
       (while (not (eobp))
-	(let ((habit (get-text-property (point) 'org-habit-p))
-          (_invisible-prop (get-text-property (point) 'invisible)))
-	  (when (and habit
-                 (or (org-window-habit-has-any-done-times habit)
-                     (progn (message "Skipping habit with no done times") nil)))
-	    (move-to-column org-habit-graph-column t)
-        (org-window-habit-delete-existing-graph-at-point)
-	    (insert-before-markers
-	     (org-window-habit-make-graph-display-string
-	      habit (org-window-habit-graph-time habit))))
-      ;; TODO: this should be reintroduced
-      ;; Inherit invisible state of hidden entries.
-      ;; (when invisible-prop
-      ;;   (put-text-property
-      ;;    (- (point) org-habit-graph-column) (point)
-      ;;    'invisible invisible-prop))))
-	  (forward-line))))))
+        (let ((habit (get-text-property (point) 'org-habit-p))
+              (_invisible-prop (get-text-property (point) 'invisible)))
+          (when habit
+            (move-to-column org-habit-graph-column t)
+            (org-window-habit-delete-existing-graph-at-point)
+            (insert-before-markers
+             (org-window-habit-make-graph-display-string
+              habit (org-window-habit-graph-time habit))))
+          ;; TODO: this should be reintroduced
+          ;; Inherit invisible state of hidden entries.
+          ;; (when invisible-prop
+          ;;   (put-text-property
+          ;;    (- (point) org-habit-graph-column) (point)
+          ;;    'invisible invisible-prop))
+          (forward-line))))))
 
 (provide 'org-window-habit-graph)
 ;;; org-window-habit-graph.el ends here

@@ -107,5 +107,23 @@
       (should (time-equal-p (org-window-habit-graph-time hourly)
                             (owh-test-make-time 2025 3 9 2 0 0))))))
 
+(ert-deftest owh-test-insert-consistency-graphs-without-completions ()
+  "Habits without completions still get a graph, without echo area noise."
+  (let* ((habit (owh-test-make-habit
+                 (list (make-instance 'org-window-habit-window-spec
+                                      :duration '(:days 7) :repetitions 1))
+                 nil))
+         (org-habit-graph-column 10)
+         (messages nil))
+    (with-temp-buffer
+      (insert (propertize "TODO Habit" 'org-habit-p habit) "\n")
+      (cl-letf (((symbol-function 'message)
+                 (lambda (&rest args) (push args messages))))
+        (org-window-habit-insert-consistency-graphs))
+      (goto-char (point-min))
+      (should (text-property-any (point-min) (point-max)
+                                 'org-window-habit-graph t))
+      (should-not messages))))
+
 (provide 'org-window-habit-graph-test)
 ;;; org-window-habit-graph-test.el ends here
