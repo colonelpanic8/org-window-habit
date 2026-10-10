@@ -7,12 +7,48 @@ All notable changes to org-window-habit are documented in this file.
 *** Added
 - Runtime helpers to test habit activity and materialize the config active at a
   reference time
+- Agenda urgency for window habits based on lateness and conformity
+- Closing notes (=org-log-done= set to =note=) count as completions
+- A warning when a habit completion is not logged
+- =org-window-habit-graph-foreground-color= and
+  =org-window-habit-graph-next-required-interval=
+- Autoloads for =org-window-habit-mode= and the interactive commands
+- Emacs 29 byte-compile and test checks
+
+*** Changed
+- Streaks no longer reset while the current interval is still in progress
+- Habit properties are inherited only as =org-use-property-inheritance= allows
+- =(:days N)= and =(:years N)= periods align to their start day, so multi-day
+  assessment intervals begin on the habit's start date
+- Habits without completions get a graph
+- Graph glyph cells use anonymous faces
+- =org-window-habit-following-days= is now
+  =org-window-habit-following-intervals= (the old name is an obsolete alias)
+- =org-window-habit-required-completion-today-foreground-color= is obsolete
+- Removed the unused =dash= dependency
 
 *** Fixed
 - Respect versioned CONFIG =:from=/=:until= ranges during evaluation, including
   inactive gaps and bounded single configs
 - Avoid conformity, streak, next-required, graph-reminder, and auto-repeat
   results for inactive habits
+- A newer config version without =:from= now chains onto an older version that
+  has both =:from= and =:until=
+- =org-window-habit-insert-config-change= keeps the original =:from=
+- Multi-month periods align to January
+- Future required intervals keep reset dates and spec baselines
+- Searching for the next required time can no longer hang Emacs; window specs
+  reject non-positive =:repetitions=
+- Reordering the logbook keeps note lines with their entry
+- Rescheduling waits for the log entry, including prompted notes, so it sees
+  the new completion
+- =completionsInWindow= counts completions the same way as the ratio
+- Graphs use the requested time and honor =org-extend-today-until=
+- Graph strings with non-ASCII glyphs no longer signal an error
+- The next reminder can fall in a later config version
+- Config dates may include a time of day
+- Conforming ratios are clamped at zero
+- README examples with multi-line =OWH_CONFIG= values, which Org ignores
 
 ** 2026-02-04 (v0.1.3)
 
