@@ -5,7 +5,7 @@
 ;; Author: Ivan Malison <IvanMalison@gmail.com>
 ;; Keywords: calendar org-mode habit interval window
 ;; URL: https://github.com/colonelpanic8/org-window-habit
-;; Version: 0.1.3
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "29.1"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -81,7 +81,7 @@ When nil, properties are used without a prefix, e.g. CONFIG."
   :group 'org-window-habit
   :type 'color)
 (make-obsolete-variable 'org-window-habit-required-completion-today-foreground-color
-                        'org-window-habit-graph-foreground-color "0.1.4")
+                        'org-window-habit-graph-foreground-color "0.2.0")
 
 (defcustom org-window-habit-graph-foreground-color "#000000"
   "Foreground color for the current and future intervals of graphs."
@@ -121,7 +121,7 @@ When nil, properties are used without a prefix, e.g. CONFIG."
   :type 'integer)
 
 (define-obsolete-variable-alias 'org-window-habit-following-days
-  'org-window-habit-following-intervals "0.1.4")
+  'org-window-habit-following-intervals "0.2.0")
 
 (defcustom org-window-habit-following-intervals 4
   "Number of assessment intervals after the current one shown in graphs."

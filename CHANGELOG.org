@@ -2,7 +2,7 @@
 
 All notable changes to org-window-habit are documented in this file.
 
-** Unreleased
+** 2026-10-09 (v0.2.0)
 
 *** Added
 - Runtime helpers to test habit activity and materialize the config active at a
