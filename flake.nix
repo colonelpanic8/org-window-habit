@@ -103,8 +103,9 @@
               --eval "(require 'org-habit)" \
               --eval "(require 'dash)" \
               --eval "(add-to-list 'load-path \"${srcDir}\")" \
+              --eval "(add-to-list 'load-path \"${srcDir}/test\")" \
               --load ${srcDir}/org-window-habit.el \
-              --load ${srcDir}/test/org-window-habit-test.el \
+              --eval "(mapc #'load (directory-files \"${srcDir}/test\" t \"-test\\\\.el\\\\'\"))" \
               -f ert-run-tests-batch-and-exit
             touch $out
           '';
