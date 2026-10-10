@@ -318,7 +318,8 @@ reschedule threshold.")
 (defun org-window-habit--windows-past-completions-p (iterators latest-done-time)
   "Return non-nil when every window of ITERATORS starts after LATEST-DONE-TIME.
 A nil LATEST-DONE-TIME means there are no completions.
-Later windows then contain no completions, so their ratios cannot change."
+Later windows under the same config then contain no completions, so
+their ratios cannot change."
   (cl-every (lambda (iterator)
               (or (null latest-done-time)
                   (time-less-p latest-done-time
@@ -405,10 +406,14 @@ or becomes inactive before a completion is required."
                                         allowed-time)))
                              (t (setq candidate-time nil)))))
                       (setq candidate-time
-                            (unless (org-window-habit--windows-past-completions-p
-                                     iterators
-                                     (and (> (length done-times) 0)
-                                          (aref done-times 0)))
+                            (if (org-window-habit--windows-past-completions-p
+                                 iterators
+                                 (and (> (length done-times) 0)
+                                      (aref done-times 0)))
+                                ;; Ratios can no longer change under this
+                                ;; version; continue with the next one.
+                                (plist-get (oref candidate-habit active-config)
+                                           :until)
                               (org-window-habit-keyed-duration-add-plist
                                candidate-time
                                reschedule-assessment-interval)))))))))

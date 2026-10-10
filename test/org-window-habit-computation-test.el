@@ -878,5 +878,17 @@ When using min aggregation, extra credit on one spec won't help if another is lo
              (org-window-habit-get-next-required-interval habit now)
              (owh-test-make-time 2025 3 10 10 0 0)))))
 
+(ert-deftest owh-test-next-required-after-version-that-never-requires ()
+  "A version that never requires a completion does not end the search."
+  (let* ((now (owh-test-make-time 2025 3 10 12 0 0))
+         (habit (org-window-habit-create-instance-from-config
+                 (concat "((:from \"2025-03-12\" :window-specs ((:duration (:days 3) :repetitions 1)))"
+                         " (:until \"2025-03-12\" :reschedule-threshold 0"
+                         " :window-specs ((:duration (:days 3) :repetitions 1))))")
+                 (vector) now)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-get-next-required-interval habit now)
+             (owh-test-make-time 2025 3 12 0 0 0)))))
+
 (provide 'org-window-habit-computation-test)
 ;;; org-window-habit-computation-test.el ends here
