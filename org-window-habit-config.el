@@ -221,6 +221,7 @@ Returns nil if the oldest config has no :from (unbounded past)."
 
 ;;; Migration utilities
 
+;;;###autoload (autoload 'org-window-habit-migrate-to-config "org-window-habit" nil t)
 (defun org-window-habit-migrate-to-config ()
   "Migrate current habit's scattered properties to unified CONFIG property.
 Reads WINDOW_DURATION/REPETITIONS_REQUIRED or WINDOW_SPECS,
@@ -291,6 +292,7 @@ If RESET_TIME exists, it's converted to :from on the config."
                    (prin1-to-string config))
     (message "Migrated habit to CONFIG property")))
 
+;;;###autoload (autoload 'org-window-habit-migrate-buffer "org-window-habit" nil t)
 (defun org-window-habit-migrate-buffer ()
   "Migrate all habits in current buffer to CONFIG property format."
   (interactive)
@@ -303,6 +305,7 @@ If RESET_TIME exists, it's converted to :from on the config."
          (cl-incf count))))
     (message "Migrated %d habits" count)))
 
+;;;###autoload (autoload 'org-window-habit-insert-config-change "org-window-habit" nil t)
 (defun org-window-habit-insert-config-change (date)
   "Insert a new config version effective from DATE.
 When called interactively, prompts for the date.

@@ -177,6 +177,7 @@ After a state-change or closing note is stored, this:
 
 ;;; Reset time management
 
+;;;###autoload (autoload 'org-window-habit-set-reset-time "org-window-habit" nil t)
 (defun org-window-habit-set-reset-time (date)
   "Set the reset date for the habit at point to DATE.
 When called interactively, prompt for the date using org's date selector.
@@ -187,6 +188,7 @@ The timestamp is stored as an inactive date-only timestamp."
   (org-entry-put nil (org-window-habit-property "RESET_TIME")
                  (format-time-string (org-time-stamp-format nil t) date)))
 
+;;;###autoload (autoload 'org-window-habit-clear-reset-time "org-window-habit" nil t)
 (defun org-window-habit-clear-reset-time ()
   "Clear the reset time for the habit at point."
   (interactive)

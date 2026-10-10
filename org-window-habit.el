@@ -216,6 +216,7 @@ Older Org releases expose `org-habit-get-priority' while newer ones use
    ((fboundp 'org-habit-get-urgency) #'org-habit-get-urgency)
    ((fboundp 'org-habit-get-priority) #'org-habit-get-priority)))
 
+;;;###autoload
 (define-minor-mode org-window-habit-mode
   "Minor mode that replaces the normal org-habit functionality."
   :lighter nil
