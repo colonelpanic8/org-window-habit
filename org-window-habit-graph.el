@@ -351,6 +351,16 @@ versions or by `org-habit'."
                  line-end))))
     (delete-region (point) end)))
 
+(defun org-window-habit-graph-time (habit)
+  "Return the time HABIT's agenda graph is drawn for.
+For habits assessed in whole days or longer, this honors
+`org-extend-today-until' like `org-habit' does."
+  (let ((interval (oref habit assessment-interval)))
+    (if (cl-some (lambda (key) (plist-get interval key))
+                 '(:hours :minutes :seconds))
+        (current-time)
+      (time-subtract (current-time) (* 3600 org-extend-today-until)))))
+
 (defun org-window-habit-insert-consistency-graphs (&optional line)
   "Insert consistency graph for any habitual tasks.
 If LINE is provided, insert graphs at beggining of line"
@@ -367,7 +377,8 @@ If LINE is provided, insert graphs at beggining of line"
 	    (move-to-column org-habit-graph-column t)
         (org-window-habit-delete-existing-graph-at-point)
 	    (insert-before-markers
-	     (org-window-habit-make-graph-display-string habit)))
+	     (org-window-habit-make-graph-display-string
+	      habit (org-window-habit-graph-time habit))))
       ;; TODO: this should be reintroduced
       ;; Inherit invisible state of hidden entries.
       ;; (when invisible-prop

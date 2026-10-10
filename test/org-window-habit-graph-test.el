@@ -88,5 +88,24 @@
     (should (eq (string-to-char (match-string 1 graph))
                 org-window-habit-completion-needed-today-glyph))))
 
+(ert-deftest owh-test-graph-time-honors-extend-today-until ()
+  "Day-based habit graphs treat early-morning hours as the previous day."
+  (let ((org-extend-today-until 4)
+        (daily (owh-test-make-habit
+                (list (make-instance 'org-window-habit-window-spec
+                                     :duration '(:days 7) :repetitions 1))
+                (list (owh-test-make-time 2025 3 1 10 0 0))))
+        (hourly (owh-test-make-habit
+                 (list (make-instance 'org-window-habit-window-spec
+                                      :duration '(:hours 8) :repetitions 1))
+                 (list (owh-test-make-time 2025 3 1 10 0 0))
+                 '(:hours 1))))
+    (cl-letf (((symbol-function 'current-time)
+               (lambda () (owh-test-make-time 2025 3 9 2 0 0))))
+      (should (time-equal-p (org-window-habit-graph-time daily)
+                            (owh-test-make-time 2025 3 8 22 0 0)))
+      (should (time-equal-p (org-window-habit-graph-time hourly)
+                            (owh-test-make-time 2025 3 9 2 0 0))))))
+
 (provide 'org-window-habit-graph-test)
 ;;; org-window-habit-graph-test.el ends here
