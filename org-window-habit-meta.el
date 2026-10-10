@@ -79,21 +79,6 @@ Scores of 0 result in a 0 aggregate (harsh penalty for failure)."
             0.0
           (exp (/ log-sum total-weight)))))))
 
-(defun org-window-habit-weighted-average (score-weight-pairs)
-  "Compute weighted average from SCORE-WEIGHT-PAIRS.
-SCORE-WEIGHT-PAIRS is a list of (score . weight) cons cells.
-Returns sum(score_i * weight_i) / sum(weight_i)."
-  (if (null score-weight-pairs)
-      1.0
-    (let ((total-weight (cl-loop for pair in score-weight-pairs
-                                 sum (cdr pair)))
-          (weighted-sum (cl-loop for pair in score-weight-pairs
-                                 sum (* (car pair) (cdr pair)))))
-      (if (zerop total-weight)
-          1.0
-        (/ weighted-sum total-weight)))))
-
-
 ;;; Weight extraction
 
 (defun org-window-habit-get-weight-from-config (configs &optional time)
