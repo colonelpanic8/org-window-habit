@@ -299,7 +299,8 @@ For :months, aligns to the 1st of the month."
 
      ((eq smallest-duration-type :months)
       (encode-time 0 0 0 1
-                   (* smallest-duration-value (floor month smallest-duration-value))
+                   (1+ (* smallest-duration-value
+                          (floor (1- month) smallest-duration-value)))
                    year))
 
      ((eq smallest-duration-type :years)

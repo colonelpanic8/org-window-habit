@@ -222,6 +222,16 @@ Use (:weeks 1) or (:weeks 1 :start :monday) for true week alignment."
          (result (org-window-habit-normalize-time-to-duration input '(:months 1))))
     (should (owh-test-times-equal-p result (owh-test-make-time 2024 3 1 0 0 0)))))
 
+(ert-deftest owh-test-normalize-time-to-multiple-months ()
+  "Test that multi-month periods start in January."
+  (cl-loop for (month n expected) in '((1 3 1) (2 3 1) (3 3 1) (4 3 4) (12 3 10)
+                                       (2 2 1) (3 2 3) (12 6 7))
+           do (should (owh-test-times-equal-p
+                       (org-window-habit-normalize-time-to-duration
+                        (owh-test-make-time 2025 month 15 10 0 0)
+                        (list :months n))
+                       (owh-test-make-time 2025 expected 1 0 0 0)))))
+
 (ert-deftest owh-test-normalize-time-to-days-7-not-week-aligned ()
   "Test that (:days 7) normalizes to day-of-month, NOT week boundaries.
 This documents current behavior: '(:days 7)' aligns based on day-of-month
