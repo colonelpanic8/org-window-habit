@@ -48,9 +48,10 @@
 ;;; Property prefix
 
 (defcustom org-window-habit-property-prefix "OWH"
-  "Property prefix for org properties used by the `org-window-habit' package."
+  "Property prefix for org properties used by the `org-window-habit' package.
+When nil, properties are used without a prefix, e.g. CONFIG."
   :group 'org-window-habit
-  :type 'string)
+  :type '(choice (string :tag "Prefix") (const :tag "No prefix" nil)))
 
 
 ;;; Color customizations
@@ -58,34 +59,34 @@
 (defcustom org-window-habit-conforming-color "#4d7085"
   "Color to indicate conformity in habit tracking."
   :group 'org-window-habit
-  :type 'string)
+  :type 'color)
 
 (defcustom org-window-habit-not-conforming-color "#d40d0d"
   "Color to indicate non-conformity in habit tracking."
   :group 'org-window-habit
-  :type 'string)
+  :type 'color)
 
 (defcustom org-window-habit-required-completion-foreground-color "#000000"
   "Foreground color for indicating required completions."
   :group 'org-window-habit
-  :type 'string)
+  :type 'color)
 
 (defcustom org-window-habit-non-required-completion-foreground-color "#FFFFFF"
   "Foreground color for indicating non-required completions."
   :group 'org-window-habit
-  :type 'string)
+  :type 'color)
 
 (defcustom org-window-habit-required-completion-today-foreground-color "#00FF00"
   "Unused; kept for compatibility."
   :group 'org-window-habit
-  :type 'string)
+  :type 'color)
 (make-obsolete-variable 'org-window-habit-required-completion-today-foreground-color
                         'org-window-habit-graph-foreground-color "0.1.4")
 
 (defcustom org-window-habit-graph-foreground-color "#000000"
   "Foreground color for the current and future intervals of graphs."
   :group 'org-window-habit
-  :type 'string)
+  :type 'color)
 
 (defcustom org-window-habit-non-conforming-scale 1.0
   "Scale factor for rescaling non-conforming assessment values."

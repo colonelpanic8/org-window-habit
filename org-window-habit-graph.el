@@ -24,6 +24,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'color)
 (require 'org-habit)
 (require 'org-window-habit-core)
 (require 'org-window-habit-computation)
@@ -60,16 +61,28 @@ Values at or above 1.0 (fully conforming) are returned unchanged."
   (if (>= value 1.0) value
     (*  org-window-habit-non-conforming-scale value)))
 
+(defun org-window-habit--color-to-hex (color)
+  "Return COLOR as a \"#RRGGBB\" string.
+COLOR is either such a string or a color name."
+  (if (string-match-p "\\`#[[:xdigit:]]\\{6\\}\\'" color)
+      color
+    (let ((rgb (color-name-to-rgb color)))
+      (unless rgb
+        (error "Unknown color: %s" color))
+      (apply #'color-rgb-to-hex (append rgb '(2))))))
+
 (defun org-window-habit-lerp-color (color1 color2 proportion)
   "Linearly interpolate between COLOR1 and COLOR2 by PROPORTION.
 PROPORTION of 0.0 returns COLOR1, 1.0 returns COLOR2.
-Colors should be hex strings like \"#RRGGBB\"."
-  (let ((r1 (string-to-number (substring color1 1 3) 16))
-        (g1 (string-to-number (substring color1 3 5) 16))
-        (b1 (string-to-number (substring color1 5 7) 16))
-        (r2 (string-to-number (substring color2 1 3) 16))
-        (g2 (string-to-number (substring color2 3 5) 16))
-        (b2 (string-to-number (substring color2 5 7) 16)))
+Colors are hex strings like \"#RRGGBB\" or color names."
+  (let* ((color1 (org-window-habit--color-to-hex color1))
+         (color2 (org-window-habit--color-to-hex color2))
+         (r1 (string-to-number (substring color1 1 3) 16))
+         (g1 (string-to-number (substring color1 3 5) 16))
+         (b1 (string-to-number (substring color1 5 7) 16))
+         (r2 (string-to-number (substring color2 1 3) 16))
+         (g2 (string-to-number (substring color2 3 5) 16))
+         (b2 (string-to-number (substring color2 5 7) 16)))
     (format "#%02x%02x%02x"
             (round (+ (* (- r2 r1) proportion) r1))
             (round (+ (* (- g2 g1) proportion) g1))

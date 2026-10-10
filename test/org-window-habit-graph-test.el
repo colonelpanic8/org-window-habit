@@ -30,6 +30,10 @@
     ;; Red and green at 50% should give yellow-ish
     (should (string-match-p "^#[78][0-9a-f][78][0-9a-f]00$" result))))
 
+(ert-deftest owh-test-lerp-color-accepts-color-names ()
+  "Color names work as well as hex strings."
+  (should (equal (org-window-habit-lerp-color "red" "#0000ff" 0.0) "#ff0000")))
+
 (ert-deftest owh-test-rescale-assessment-value-conforming ()
   "Test rescaling conforming values."
   (should (= (org-window-habit-rescale-assessment-value 1.0) 1.0))
