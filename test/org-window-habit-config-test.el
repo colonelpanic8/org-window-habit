@@ -88,26 +88,26 @@
         ;; :from should be nil (unbounded past)
         (should (null (plist-get second :from)))))))
 
-(ert-deftest owh-test-parse-config-versioned-with-gap ()
-  "Test parsing versioned configs with explicit gap."
+(ert-deftest owh-test-parse-config-bounded-older-config ()
+  "Test that a newer config chains from an older config with both bounds."
   (let ((config-str "((:window-specs ((:duration (:days 7) :repetitions 3)))
                      (:until \"2025-03-01\"
                       :from \"2025-01-01\"
                       :window-specs ((:duration (:days 7) :repetitions 2))))"))
     (let ((configs (org-window-habit-parse-config config-str)))
       (should (= (length configs) 2))
-      ;; First config starts at 2025-03-01 (implicit from newer config's :until doesn't exist,
-      ;; but older config's :until is used as gap marker)
-      (let ((first (nth 0 configs)))
-        ;; No :from on first because there's a gap - it's implicitly "now onwards"
-        ;; Actually, first config's :from should be nil (unbounded to present)
-        (should (null (plist-get first :from))))
-      ;; Second config has explicit bounds creating a gap
+      (should (owh-test-times-equal-p (plist-get (nth 0 configs) :from)
+                                      (owh-test-make-time 2025 3 1 0 0 0)))
       (let ((second (nth 1 configs)))
         (should (owh-test-times-equal-p (plist-get second :from)
                                         (owh-test-make-time 2025 1 1 0 0 0)))
         (should (owh-test-times-equal-p (plist-get second :until)
-                                        (owh-test-make-time 2025 3 1 0 0 0)))))))
+                                        (owh-test-make-time 2025 3 1 0 0 0))))
+      (should (eq (org-window-habit-get-config-for-time
+                   configs (owh-test-make-time 2025 2 1 12 0 0))
+                  (nth 1 configs)))
+      (should (null (org-window-habit-get-config-for-time
+                     configs (owh-test-make-time 2024 12 1 12 0 0)))))))
 
 (ert-deftest owh-test-parse-config-explicit-from-on-last ()
   "Test that explicit :from on last config acts like RESET_TIME."

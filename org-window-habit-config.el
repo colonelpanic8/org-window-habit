@@ -150,20 +150,13 @@ Returns a new list with resolved dates."
         ;; This means the "current" config has an end date, which is wrong order
         (error "Configs must be in reverse temporal order (most recent first)")))
     ;; Chain implicit :from values (each config's :from = next config's :until)
-    ;; BUT only if the next config doesn't have an explicit :from that creates a gap
     (cl-loop for i from 0 below (length result)
              for config = (nth i result)
              for next-config = (when (< (1+ i) (length result))
                                  (nth (1+ i) result))
-             ;; If this config doesn't have explicit :from, AND next config has :until,
-             ;; AND next config does NOT have an explicit :from (which would indicate a gap)
-             ;; then chain the :from
              when (and (null (plist-get config :from))
                        next-config
-                       (plist-get next-config :until)
-                       ;; Only chain if next config's range is unbounded at start
-                       ;; (no explicit :from means continuous from before)
-                       (null (plist-get next-config :from)))
+                       (plist-get next-config :until))
              do (setf (nth i result)
                       (plist-put config :from (plist-get next-config :until))))
     result))
