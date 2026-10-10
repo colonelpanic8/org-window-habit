@@ -138,7 +138,7 @@ Returns a list of plists with :start, :end, :time, and :text properties."
       (while (and (< (point) end)
                   (re-search-forward re end t))
         (let* ((entry-start (match-beginning 0))
-               (entry-end (line-beginning-position 2))  ; Start of next line
+               (entry-end (org-window-habit--logbook-item-end end))
                (timestamp-str (match-string-no-properties 3))
                (entry-time (org-time-string-to-time timestamp-str))
                (entry-text (buffer-substring entry-start entry-end)))
@@ -148,6 +148,16 @@ Returns a list of plists with :start, :end, :time, and :text properties."
                       :text entry-text)
                 entries)))
       (nreverse entries))))
+
+(defun org-window-habit--logbook-item-end (limit)
+  "Return the end of the logbook item on the current line.
+The item includes following note lines up to the next list item or LIMIT."
+  (save-excursion
+    (forward-line 1)
+    (while (and (< (point) limit)
+                (not (looking-at-p "[ \t]*- ")))
+      (forward-line 1))
+    (min (point) limit)))
 
 (defun org-window-habit--move-entry-to-sorted-position (entry other-entries end-marker)
   "Move ENTRY to its correct sorted position among OTHER-ENTRIES.

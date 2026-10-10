@@ -160,6 +160,34 @@ to the correct sorted position."
         (should (time-equal-p (nth 2 (nth 2 times))
                               (owh-test-make-time 2024 1 1 10 0 0)))))))
 
+(ert-deftest owh-test-fix-logbook-order-moves-entry-notes ()
+  "Test that a moved entry keeps its note lines and others keep theirs."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n"
+              ":PROPERTIES:\n"
+              ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3)))\n"
+              ":END:\n"
+              ":LOGBOOK:\n"
+              "- State \"DONE\"       from \"TODO\"       [2024-01-01 Mon 10:00] \\\\\n"
+              "  backdated note\n"
+              "- State \"DONE\"       from \"TODO\"       [2024-01-15 Mon 10:00] \\\\\n"
+              "  newest note\n"
+              "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n"
+              ":END:\n")
+      (goto-char (point-min))
+      (org-window-habit-fix-logbook-order)
+      (should (string-match-p
+               (concat ":LOGBOOK:\n"
+                       "- State \"DONE\" +from \"TODO\" +\\[2024-01-15 Mon 10:00\\] \\\\\\\\\n"
+                       "  newest note\n"
+                       "- State \"DONE\" +from \"TODO\" +\\[2024-01-10 Wed 10:00\\]\n"
+                       "- State \"DONE\" +from \"TODO\" +\\[2024-01-01 Mon 10:00\\] \\\\\\\\\n"
+                       "  backdated note\n"
+                       ":END:")
+               (buffer-string))))))
+
 (ert-deftest owh-test-parse-logbook-does-not-read-next-entry-logbook ()
   "Test that parse-logbook doesn't read the next entry's LOGBOOK drawer.
 When an entry has no state logs, the parser should return nil,
