@@ -868,5 +868,15 @@ When using min aggregation, extra credit on one spec won't help if another is lo
                     (owh-test-make-time 2025 3 10 12 0 0))))
     (should (eql (org-window-habit-conforming-ratio iterator) 0.0))))
 
+(ert-deftest owh-test-next-required-with-time-of-day-start ()
+  "A version starting at a time of day is searched from that time."
+  (let* ((now (owh-test-make-time 2025 3 10 12 0 0))
+         (habit (org-window-habit-create-instance-from-config
+                 "(:from \"2025-03-10 10:00\" :window-specs ((:duration (:days 3) :repetitions 1)))"
+                 (vector) now)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-get-next-required-interval habit now)
+             (owh-test-make-time 2025 3 10 10 0 0)))))
+
 (provide 'org-window-habit-computation-test)
 ;;; org-window-habit-computation-test.el ends here

@@ -353,6 +353,13 @@ or becomes inactive before a completion is required."
                      reschedule-assessment-interval)
                   (org-window-habit-normalize-time-to-duration
                    now reschedule-assessment-interval)))
+              (version-start (plist-get (oref active-habit active-config) :from))
+              (candidate-time
+               ;; Normalizing can move the candidate before a version
+               ;; that starts at a time of day.
+               (if (and version-start (time-less-p candidate-time version-start))
+                   version-start
+                 candidate-time))
               (steps 0)
               result)
           (while (and (null result) candidate-time
