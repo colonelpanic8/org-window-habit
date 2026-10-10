@@ -809,5 +809,21 @@ When using min aggregation, extra credit on one spec won't help if another is lo
 
 ;;; ==========================================================================
 
+(ert-deftest owh-test-next-required-terminates-with-zero-threshold ()
+  "Test that a threshold the ratio can never drop below ends the search."
+  (let* ((now (owh-test-make-time 2025 3 10 12 0 0))
+         (habit (org-window-habit-create-instance-from-config
+                 "(:window-specs ((:duration (:days 7) :repetitions 2)) :reschedule-threshold 0.0)"
+                 (vector (owh-test-make-time 2025 3 9 10 0 0))
+                 now)))
+    (should-not (org-window-habit-get-next-required-interval habit now))))
+
+(ert-deftest owh-test-window-spec-rejects-non-positive-repetitions ()
+  "Test that window specs require a positive repetition count."
+  (should-error (make-instance 'org-window-habit-window-spec
+                               :duration '(:days 7) :repetitions 0))
+  (should-error (make-instance 'org-window-habit-window-spec
+                               :duration '(:days 7) :repetitions -1)))
+
 (provide 'org-window-habit-computation-test)
 ;;; org-window-habit-computation-test.el ends here

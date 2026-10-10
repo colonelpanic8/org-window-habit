@@ -294,6 +294,21 @@ HABIT is inactive at TIME."
 
 ;;; Next required interval
 
+(defconst org-window-habit-max-reschedule-search-steps 10000
+  "Maximum candidate times examined when searching for the next required time.
+Bounds the search for configurations whose ratio never falls below the
+reschedule threshold.")
+
+(defun org-window-habit--windows-past-completions-p (iterators latest-done-time)
+  "Return non-nil when every window of ITERATORS starts after LATEST-DONE-TIME.
+A nil LATEST-DONE-TIME means there are no completions.
+Later windows then contain no completions, so their ratios cannot change."
+  (cl-every (lambda (iterator)
+              (or (null latest-done-time)
+                  (time-less-p latest-done-time
+                               (oref (oref iterator window) start-time))))
+            iterators))
+
 (cl-defmethod org-window-habit-get-next-required-interval
   ((habit org-window-habit) &optional now)
   "Find the next time when HABIT will need a completion.
@@ -321,8 +336,11 @@ completion is required."
                      reschedule-assessment-interval)
                   (org-window-habit-normalize-time-to-duration
                    now reschedule-assessment-interval)))
+              (steps 0)
               result)
-          (while (and (null result) candidate-time)
+          (while (and (null result) candidate-time
+                      (< steps org-window-habit-max-reschedule-search-steps))
+            (cl-incf steps)
             (let ((candidate-habit
                    (org-window-habit-for-time habit candidate-time)))
               (if (null candidate-habit)
@@ -356,9 +374,13 @@ completion is required."
                           (unless result
                             (setq candidate-time nil)))
                       (setq candidate-time
-                            (org-window-habit-keyed-duration-add-plist
-                             candidate-time
-                             reschedule-assessment-interval))))))))
+                            (unless (org-window-habit--windows-past-completions-p
+                                     iterators
+                                     (and (> (length done-times) 0)
+                                          (aref done-times 0)))
+                              (org-window-habit-keyed-duration-add-plist
+                               candidate-time
+                               reschedule-assessment-interval)))))))))
           result)))))
 
 (cl-defmethod org-window-habit-get-future-required-intervals

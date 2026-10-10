@@ -236,6 +236,15 @@ Validates required properties and sets up defaults."
            do (oset window-spec habit habit)))
 
 
+(cl-defmethod initialize-instance :after
+  ((spec org-window-habit-window-spec) &rest _args)
+  "Validate SPEC after slot values are set."
+  (let ((repetitions (oref spec target-repetitions)))
+    (unless (and (numberp repetitions) (> repetitions 0))
+      (error "Window spec :repetitions must be a positive number, got %S"
+             repetitions))))
+
+
 ;;; Assessment window methods
 
 (cl-defmethod org-window-habit-time-falls-in-assessment-interval
