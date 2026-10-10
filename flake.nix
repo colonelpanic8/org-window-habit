@@ -3,10 +3,12 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # Oldest supported Emacs (Package-Requires: emacs 29.1)
+    nixpkgs-emacs29.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, nixpkgs-emacs29, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -16,6 +18,12 @@
         ]);
 
         emacsBin = "${emacsWithPackages}/bin/emacs";
+
+        # Only used to run the checks, so its known vulnerabilities don't matter.
+        emacs29 = (import nixpkgs-emacs29 {
+          inherit system;
+          config.permittedInsecurePackages = [ "emacs-29.4" ];
+        }).emacs29;
 
         srcDir = ./.;
 
@@ -33,21 +41,43 @@
           "org-window-habit.el"
         ];
 
+        mkByteCompile = name: emacs: pkgs.runCommand name {} ''
+          # Copy all source files to writable location
+          ${builtins.concatStringsSep "\n" (map (f: "cp ${srcDir}/${f} .") elispFiles)}
+          ${emacs}/bin/emacs --batch \
+            --eval "(require 'package)" \
+            --eval "(package-initialize)" \
+            --eval "(require 'org)" \
+            --eval "(require 'org-habit)" \
+            --eval "(add-to-list 'load-path \".\")" \
+            --eval "(setq byte-compile-error-on-warn t)" \
+            -f batch-byte-compile ${builtins.concatStringsSep " " elispFiles}
+          touch $out
+        '';
+
+        mkTest = name: emacs: pkgs.runCommand name {
+          # Include tzdata so DST-related tests can use set-time-zone-rule
+          TZDIR = "${pkgs.tzdata}/share/zoneinfo";
+        } ''
+          ${emacs}/bin/emacs --batch \
+            --eval "(require 'package)" \
+            --eval "(package-initialize)" \
+            --eval "(require 'org)" \
+            --eval "(require 'org-habit)" \
+            --eval "(add-to-list 'load-path \"${srcDir}\")" \
+            --eval "(add-to-list 'load-path \"${srcDir}/test\")" \
+            --load ${srcDir}/org-window-habit.el \
+            --eval "(mapc #'load (directory-files \"${srcDir}/test\" t \"-test\\\\.el\\\\'\"))" \
+            -f ert-run-tests-batch-and-exit
+          touch $out
+        '';
+
       in {
         checks = {
-          byte-compile = pkgs.runCommand "byte-compile" {} ''
-            # Copy all source files to writable location
-            ${builtins.concatStringsSep "\n" (map (f: "cp ${srcDir}/${f} .") elispFiles)}
-            ${emacsBin} --batch \
-              --eval "(require 'package)" \
-              --eval "(package-initialize)" \
-              --eval "(require 'org)" \
-              --eval "(require 'org-habit)" \
-              --eval "(add-to-list 'load-path \".\")" \
-              --eval "(setq byte-compile-error-on-warn t)" \
-              -f batch-byte-compile ${builtins.concatStringsSep " " elispFiles}
-            touch $out
-          '';
+          byte-compile = mkByteCompile "byte-compile" emacsWithPackages;
+          byte-compile-emacs29 = mkByteCompile "byte-compile-emacs29" emacs29;
+          test = mkTest "test" emacsWithPackages;
+          test-emacs29 = mkTest "test-emacs29" emacs29;
 
           checkdoc = pkgs.runCommand "checkdoc" {} ''
             ${emacsBin} --batch \
@@ -90,22 +120,6 @@
             touch $out
           '';
 
-          test = pkgs.runCommand "test" {
-            # Include tzdata so DST-related tests can use set-time-zone-rule
-            TZDIR = "${pkgs.tzdata}/share/zoneinfo";
-          } ''
-            ${emacsBin} --batch \
-              --eval "(require 'package)" \
-              --eval "(package-initialize)" \
-              --eval "(require 'org)" \
-              --eval "(require 'org-habit)" \
-              --eval "(add-to-list 'load-path \"${srcDir}\")" \
-              --eval "(add-to-list 'load-path \"${srcDir}/test\")" \
-              --load ${srcDir}/org-window-habit.el \
-              --eval "(mapc #'load (directory-files \"${srcDir}/test\" t \"-test\\\\.el\\\\'\"))" \
-              -f ert-run-tests-batch-and-exit
-            touch $out
-          '';
         };
 
         devShells.default = pkgs.mkShell {

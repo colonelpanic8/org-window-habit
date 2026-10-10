@@ -6,6 +6,10 @@ check:
 test:
     nix build .#checks.x86_64-linux.test -L
 
+# Run the ERT test suite on Emacs 29, the oldest supported version
+test-emacs29:
+    nix build .#checks.x86_64-linux.test-emacs29 -L
+
 # Byte-compile with warnings as errors
 byte-compile:
     nix build .#checks.x86_64-linux.byte-compile -L
