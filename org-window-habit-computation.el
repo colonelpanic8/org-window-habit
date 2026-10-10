@@ -376,63 +376,28 @@ Each interval is computed by:
 This enables prospective planning: showing future \"must complete by\" dates
 assuming you complete at the last possible moment each time."
   (setq now (or now (current-time)))
-  (let ((active-habit (org-window-habit-for-time habit now)))
-    (if (null active-habit)
-        nil
-      (unless (eq active-habit habit)
-        (setq habit active-habit))
-      (with-slots (window-specs assessment-interval reschedule-assessment-interval
-                  reschedule-interval reschedule-threshold
-                  max-repetitions-per-interval aggregation-fn only-days
-                  reschedule-days start-time configs active-config
-                  graph-assessment-fn)
-          habit
-        (let ((result '())
-              (simulated-done-times (append (oref habit done-times) nil)))
-          (cl-loop
-           repeat count
-           while now
-           do
-           (let* ((copied-specs
-                   (cl-loop
-                    for spec in window-specs
-                    collect
-                    (make-instance
-                     'org-window-habit-window-spec
-                     :duration (oref spec duration-plist)
-                     :repetitions (oref spec target-repetitions)
-                     :value (oref spec conforming-value)
-                     :find-window (oref spec find-window))))
-                  (temp-habit
-                   (make-instance
-                    'org-window-habit
-                    :window-specs copied-specs
-                    :assessment-interval assessment-interval
-                    :reschedule-assessment-interval
-                    reschedule-assessment-interval
-                    :reschedule-interval reschedule-interval
-                    :reschedule-threshold reschedule-threshold
-                    :max-repetitions-per-interval
-                    max-repetitions-per-interval
-                    :aggregation-fn aggregation-fn
-                    :only-days only-days
-                    :reschedule-days reschedule-days
-                    :configs configs
-                    :active-config active-config
-                    :graph-assessment-fn graph-assessment-fn
-                    :done-times
-                    (vconcat
-                     (sort (copy-sequence simulated-done-times)
-                           (lambda (a b) (time-less-p b a))))
-                    :start-time start-time))
-                  (next-required
-                   (org-window-habit-get-next-required-interval
-                    temp-habit now)))
-             (when next-required
-               (push next-required result)
-               (push next-required simulated-done-times))
-             (setq now next-required)))
-          (nreverse result))))))
+  (let ((habit (org-window-habit-for-time habit now)))
+    (when habit
+      (let ((result '())
+            (simulated-done-times (append (oref habit done-times) nil)))
+        (cl-loop
+         repeat count
+         while now
+         do
+         (let* ((temp-habit
+                 (org-window-habit--copy-with-done-times
+                  habit
+                  (vconcat
+                   (sort (copy-sequence simulated-done-times)
+                         (lambda (a b) (time-less-p b a))))))
+                (next-required
+                 (org-window-habit-get-next-required-interval
+                  temp-habit now)))
+           (when next-required
+             (push next-required result)
+             (push next-required simulated-done-times))
+           (setq now next-required)))
+        (nreverse result)))))
 
 
 ;;; Assessment functions

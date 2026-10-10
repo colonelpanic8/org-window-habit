@@ -494,6 +494,28 @@ should return the next predicted interval."
     (let ((actual-first (org-window-habit-get-next-required-interval habit now)))
       (should (owh-test-times-equal-p (nth 0 predicted) actual-first)))))
 
+(ert-deftest owh-test-future-intervals-keep-all-habit-settings ()
+  "Test that projections keep spec baselines and the habit's reset time."
+  (let ((now (owh-test-make-time 2025 3 10 12 0 0)))
+    (dolist (case
+             `(("(:window-specs ((:duration (:days 10) :repetitions 4 :conforming-baseline 0.5)))"
+                ,(list (owh-test-make-time 2025 3 1 10 0 0)
+                       (owh-test-make-time 2025 3 2 10 0 0)
+                       (owh-test-make-time 2025 3 3 10 0 0)
+                       (owh-test-make-time 2025 3 4 10 0 0)))
+               ("(:window-specs ((:duration (:days 7) :repetitions 2)) :from \"2025-03-08\")"
+                ,(list (owh-test-make-time 2025 3 5 10 0 0)
+                       (owh-test-make-time 2025 3 6 10 0 0)
+                       (owh-test-make-time 2025 3 9 10 0 0)))))
+      (let ((habit (org-window-habit-create-instance-from-config
+                    (car case)
+                    (vconcat (sort (copy-sequence (cadr case))
+                                   (lambda (a b) (time-less-p b a))))
+                    now)))
+        (should (owh-test-times-equal-p
+                 (car (org-window-habit-get-future-required-intervals habit 1 now))
+                 (org-window-habit-get-next-required-interval habit now)))))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Stress Test: Large Count
 ;;; ---------------------------------------------------------------------------

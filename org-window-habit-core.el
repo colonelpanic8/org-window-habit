@@ -364,6 +364,18 @@ the selected config."
            time (oref habit graph-assessment-fn)))))))
 
 
+(defun org-window-habit--copy-with-done-times (habit done-times)
+  "Return a copy of HABIT whose completions are DONE-TIMES.
+DONE-TIMES is a vector in descending order.  Window specs are copied so
+their back-references point at the new habit."
+  (let ((copy (clone habit)))
+    (oset copy done-times done-times)
+    (oset copy window-specs (mapcar #'clone (oref habit window-specs)))
+    (dolist (spec (oref copy window-specs))
+      (oset spec habit copy))
+    copy))
+
+
 ;;; Window spec methods
 
 (defun org-window-habit-get-window-where-time-in-last-assessment (spec time)
