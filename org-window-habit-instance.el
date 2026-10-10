@@ -80,42 +80,41 @@ This is the backwards-compatible path for habits without CONFIG property.
 Also builds and stores a config plist in the configs slot for uniformity.
 TIME defaults to the current time."
   (let* ((assessment-interval-str
-          (org-entry-get nil (org-window-habit-property "ASSESSMENT_INTERVAL")))
+          (org-window-habit-entry-get "ASSESSMENT_INTERVAL"))
          (assessment-interval
           (org-window-habit-string-duration-to-plist
            assessment-interval-str :default '(:days 1)))
          (reschedule-interval-str
-          (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL")))
+          (org-window-habit-entry-get "RESCHEDULE_INTERVAL"))
          (reschedule-interval
           (org-window-habit-string-duration-to-plist
            reschedule-interval-str :default '(:days 1)))
          (reschedule-assessment-interval-str
-          (org-entry-get
-           nil (org-window-habit-property "RESCHEDULE_ASSESSMENT_INTERVAL")))
+          (org-window-habit-entry-get "RESCHEDULE_ASSESSMENT_INTERVAL"))
          (reschedule-assessment-interval
           (org-window-habit-string-duration-to-plist
            reschedule-assessment-interval-str :default '(:days 1)))
          (reschedule-threshold-str
-          (org-entry-get nil (org-window-habit-property "RESCHEDULE_THRESHOLD")))
+          (org-window-habit-entry-get "RESCHEDULE_THRESHOLD"))
          (reschedule-threshold
           (if reschedule-threshold-str
               (string-to-number reschedule-threshold-str)
             1.0))
          (max-reps-str
-          (org-entry-get nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t))
+          (org-window-habit-entry-get "MAX_REPETITIONS_PER_INTERVAL"))
          (max-repetitions-per-interval
           (string-to-number (or max-reps-str "1")))
          (reset-time-str
-          (org-entry-get nil (org-window-habit-property "RESET_TIME")))
+          (org-window-habit-entry-get "RESET_TIME"))
          (reset-time
           (when reset-time-str
             (org-time-string-to-time reset-time-str)))
          (only-days-str
-          (org-entry-get nil (org-window-habit-property "ONLY_DAYS")))
+          (org-window-habit-entry-get "ONLY_DAYS"))
          (only-days
           (org-window-habit-parse-only-days only-days-str))
          (reschedule-days-str
-          (org-entry-get nil (org-window-habit-property "RESCHEDULE_DAYS")))
+          (org-window-habit-entry-get "RESCHEDULE_DAYS"))
          (reschedule-days
           (org-window-habit-parse-only-days reschedule-days-str))
          (window-specs-objects
@@ -177,27 +176,24 @@ TIME defaults to the current time."
 (defun org-window-habit-build-window-specs-plists-from-properties ()
   "Build window-specs as plists from current heading's scattered properties.
 Returns a list of plists suitable for storing in a config."
-  (let ((spec-text (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)))
+  (let ((spec-text (org-window-habit-entry-get "WINDOW_SPECS")))
     (if spec-text
         ;; WINDOW_SPECS is already in plist format
         (car (read-from-string spec-text))
       ;; Build from WINDOW_DURATION and REPETITIONS_REQUIRED
       (let ((window-length
              (org-window-habit-string-duration-to-plist
-              (org-entry-get nil (org-window-habit-property "WINDOW_DURATION")
-                             "1d") :default '(:days 1)))
+              (org-window-habit-entry-get "WINDOW_DURATION") :default '(:days 1)))
             (repetitions-required
              (string-to-number
-              (or (org-entry-get nil
-                                 (org-window-habit-property "REPETITIONS_REQUIRED")
-                                 t) "1"))))
+              (or (org-window-habit-entry-get "REPETITIONS_REQUIRED") "1"))))
         (list (list :duration window-length
                     :repetitions repetitions-required))))))
 
 (defun org-window-habit-create-specs ()
   "Parse WINDOW_SPECS property into a list of window-spec objects.
 Returns nil if the property is not set."
-  (let ((spec-text (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)))
+  (let ((spec-text (org-window-habit-entry-get "WINDOW_SPECS")))
     (when spec-text
       (cl-loop for args in (car (read-from-string spec-text))
                collect (apply #'make-instance 'org-window-habit-window-spec args)))))
@@ -208,13 +204,10 @@ This is the simple configuration format for habits with one evaluation window."
   (let*
       ((window-length
         (org-window-habit-string-duration-to-plist
-         (org-entry-get nil (org-window-habit-property "WINDOW_DURATION")
-                        "1d") :default '(:days 1)))
+         (org-window-habit-entry-get "WINDOW_DURATION") :default '(:days 1)))
        (repetitions-required
         (string-to-number
-         (or (org-entry-get nil
-                            (org-window-habit-property "REPETITIONS_REQUIRED")
-                            t) "1"))))
+         (or (org-window-habit-entry-get "REPETITIONS_REQUIRED") "1"))))
     (list
      (make-instance
       'org-window-habit-window-spec

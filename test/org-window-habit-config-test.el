@@ -1015,5 +1015,25 @@ returns nil, allowing callers to filter those completions."
     ;; With 2 completions and old config requiring 2, should be at 1.0
     (should (>= ratio 0.99))))
 
+(ert-deftest owh-test-scattered-properties-inherit-consistently ()
+  "Instance creation and migration read inherited properties the same way."
+  (let ((org-window-habit-property-prefix "OWH"))
+    (dolist (inherit '(nil t))
+      (with-temp-buffer
+        (org-mode)
+        (insert "* Habits\n:PROPERTIES:\n:OWH_ASSESSMENT_INTERVAL: (:days 2)\n:END:\n"
+                "** TODO Habit\n:PROPERTIES:\n:OWH_WINDOW_DURATION: (:days 7)\n:END:\n")
+        (goto-char (point-max))
+        (re-search-backward "^\\*\\* TODO")
+        (let* ((org-use-property-inheritance inherit)
+               (expected (if inherit '(:days 2) '(:days 1)))
+               (habit (org-window-habit-create-instance-from-heading-at-point)))
+          (should (equal (oref habit assessment-interval) expected))
+          (org-window-habit-migrate-to-config)
+          (should (equal (org-window-habit-config-get-assessment-interval
+                          (car (org-window-habit-parse-config
+                                (org-entry-get nil "OWH_CONFIG"))))
+                         expected)))))))
+
 (provide 'org-window-habit-config-test)
 ;;; org-window-habit-config-test.el ends here

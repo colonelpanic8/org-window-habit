@@ -231,21 +231,20 @@ plist, and writes it to the CONFIG property.
 
 If RESET_TIME exists, it's converted to :from on the config."
   (interactive)
-  (let* ((window-specs-str (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t))
-         (window-duration (org-entry-get nil (org-window-habit-property "WINDOW_DURATION") t))
-         (reps-required (org-entry-get nil (org-window-habit-property "REPETITIONS_REQUIRED") t))
-         (assessment-str (org-entry-get nil (org-window-habit-property "ASSESSMENT_INTERVAL") t))
+  (let* ((window-specs-str (org-window-habit-entry-get "WINDOW_SPECS"))
+         (window-duration (org-window-habit-entry-get "WINDOW_DURATION"))
+         (reps-required (org-window-habit-entry-get "REPETITIONS_REQUIRED"))
+         (assessment-str (org-window-habit-entry-get "ASSESSMENT_INTERVAL"))
          (reschedule-assessment-str
-          (org-entry-get
-           nil (org-window-habit-property "RESCHEDULE_ASSESSMENT_INTERVAL") t))
-         (reschedule-str (org-entry-get nil (org-window-habit-property "RESCHEDULE_INTERVAL") t))
+          (org-window-habit-entry-get "RESCHEDULE_ASSESSMENT_INTERVAL"))
+         (reschedule-str (org-window-habit-entry-get "RESCHEDULE_INTERVAL"))
          (reschedule-threshold-str
-          (org-entry-get nil (org-window-habit-property "RESCHEDULE_THRESHOLD") t))
-         (max-reps-str (org-entry-get nil (org-window-habit-property "MAX_REPETITIONS_PER_INTERVAL") t))
-         (only-days-str (org-entry-get nil (org-window-habit-property "ONLY_DAYS") t))
+          (org-window-habit-entry-get "RESCHEDULE_THRESHOLD"))
+         (max-reps-str (org-window-habit-entry-get "MAX_REPETITIONS_PER_INTERVAL"))
+         (only-days-str (org-window-habit-entry-get "ONLY_DAYS"))
          (reschedule-days-str
-          (org-entry-get nil (org-window-habit-property "RESCHEDULE_DAYS") t))
-         (reset-time-str (org-entry-get nil (org-window-habit-property "RESET_TIME")))
+          (org-window-habit-entry-get "RESCHEDULE_DAYS"))
+         (reset-time-str (org-window-habit-entry-get "RESET_TIME"))
          ;; Build window-specs list
          (window-specs
           (if window-specs-str
