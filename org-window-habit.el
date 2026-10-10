@@ -6,7 +6,7 @@
 ;; Keywords: calendar org-mode habit interval window
 ;; URL: https://github.com/colonelpanic8/org-window-habit
 ;; Version: 0.1.3
-;; Package-Requires: ((emacs "29.1") (dash "2.10.0"))
+;; Package-Requires: ((emacs "29.1"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by

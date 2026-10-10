@@ -12,7 +12,6 @@
         pkgs = nixpkgs.legacyPackages.${system};
 
         emacsWithPackages = pkgs.emacsPackages.emacsWithPackages (epkgs: [
-          epkgs.dash
           epkgs.package-lint
         ]);
 
@@ -44,7 +43,6 @@
               --eval "(package-initialize)" \
               --eval "(require 'org)" \
               --eval "(require 'org-habit)" \
-              --eval "(require 'dash)" \
               --eval "(add-to-list 'load-path \".\")" \
               --eval "(setq byte-compile-error-on-warn t)" \
               -f batch-byte-compile ${builtins.concatStringsSep " " elispFiles}
@@ -101,7 +99,6 @@
               --eval "(package-initialize)" \
               --eval "(require 'org)" \
               --eval "(require 'org-habit)" \
-              --eval "(require 'dash)" \
               --eval "(add-to-list 'load-path \"${srcDir}\")" \
               --eval "(add-to-list 'load-path \"${srcDir}/test\")" \
               --load ${srcDir}/org-window-habit.el \
