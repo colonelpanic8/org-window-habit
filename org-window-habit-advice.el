@@ -107,20 +107,24 @@ ORIG is the original function, ARGS are its arguments."
       (apply #'org-window-habit-auto-repeat args))
     res))
 
-(defun org-window-habit-add-log-note-advice (orig &rest args)
-  "Advice for `org-add-log-note' that handles `org-window-habit' entries.
+(defun org-window-habit-store-log-note-advice (orig &rest args)
+  "Advice for `org-store-log-note' that handles `org-window-habit' entries.
 ORIG is the original function, ARGS are its arguments.
-After the log note is added, this:
+After a state-change or closing note is stored, this:
 1. Fixes logbook order if entries are out of chronological order
 2. Triggers the habit rescheduling logic"
-  (let ((res (apply orig args)))
-    (when org-window-habit-mode
-      ;; Fix logbook order for org-window-habits
-      (when (org-window-habit-entry-p)
-        (org-window-habit-fix-logbook-order))
-      ;; Trigger auto-repeat for all habits
-      (when (org-is-habit-p)
-        (apply #'org-window-habit-auto-repeat args)))
+  (let ((marker (when (and (memq org-log-note-purpose '(state done))
+                           (markerp org-log-note-marker)
+                           (marker-buffer org-log-note-marker))
+                  (copy-marker org-log-note-marker)))
+        (res (apply orig args)))
+    (when (and marker org-window-habit-mode)
+      (org-with-point-at marker
+        (when (org-window-habit-entry-p)
+          (org-window-habit-fix-logbook-order))
+        (when (org-is-habit-p)
+          (org-window-habit-auto-repeat)))
+      (set-marker marker nil))
     res))
 
 

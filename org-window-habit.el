@@ -210,8 +210,8 @@ Older Org releases expose `org-habit-get-priority' while newer ones use
                       :around #'org-window-habit-get-urgency-advice))
         (advice-add #'org-auto-repeat-maybe
                     :around #'org-window-habit-auto-repeat-maybe-advice)
-        (advice-add #'org-add-log-note
-                    :around #'org-window-habit-add-log-note-advice)
+        (advice-add #'org-store-log-note
+                    :around #'org-window-habit-store-log-note-advice)
         (advice-add #'org-habit-insert-consistency-graphs
                     :around #'org-window-habit-insert-consistency-graphs-advice))
     (let ((priority-function
@@ -220,7 +220,7 @@ Older Org releases expose `org-habit-get-priority' while newer ones use
       (when priority-function
         (advice-remove priority-function #'org-window-habit-get-urgency-advice))
       (advice-remove #'org-auto-repeat-maybe #'org-window-habit-auto-repeat-maybe-advice)
-      (advice-remove #'org-add-log-note #'org-window-habit-add-log-note-advice)
+      (advice-remove #'org-store-log-note #'org-window-habit-store-log-note-advice)
       (advice-remove #'org-habit-insert-consistency-graphs #'org-window-habit-insert-consistency-graphs-advice))))
 
 (provide 'org-window-habit)
