@@ -619,6 +619,27 @@ returns nil, allowing callers to filter those completions."
         (should (owh-test-times-equal-p (plist-get (nth 1 configs) :until)
                                         (owh-test-make-time 2025 6 1 0 0 0)))))))
 
+(ert-deftest owh-test-insert-config-change-preserves-start ()
+  "Test that inserting a config change keeps the original config's :from."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Test habit\n:PROPERTIES:\n"
+              ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 3))"
+              " :from \"2025-01-01\")\n:END:\n")
+      (goto-char (point-min))
+      (org-window-habit-insert-config-change-at-date (owh-test-make-time 2025 6 1))
+      (should-not (string-match-p ":from nil" (org-entry-get nil "CONFIG")))
+      (let ((configs (org-window-habit-parse-config (org-entry-get nil "CONFIG"))))
+        (should (owh-test-times-equal-p (plist-get (nth 1 configs) :from)
+                                        (owh-test-make-time 2025 1 1 0 0 0)))
+        (should-not (org-window-habit-get-config-for-time
+                     configs (owh-test-make-time 2024 12 1 12 0 0))))
+      (should-error
+       (org-window-habit-insert-config-change-at-date
+        (owh-test-make-time 2025 6 1))
+       :type 'user-error))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Versioned Config: Complete Config Parameter Tests
 ;;; ---------------------------------------------------------------------------

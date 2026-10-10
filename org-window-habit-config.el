@@ -327,14 +327,19 @@ and the old config is preserved with :until DATE."
                (configs (if is-versioned config-data (list config-data)))
                ;; Clone the current (first) config for the new entry
                (current-config (car configs))
+               (current-from (plist-get current-config :from))
                (new-current (copy-sequence current-config))
                (new-old (copy-sequence current-config)))
-          ;; Set :from on new current config
+          (when (and current-from
+                     (not (time-less-p
+                           (if (stringp current-from)
+                               (org-window-habit-parse-config-date current-from)
+                             current-from)
+                           (org-window-habit-parse-config-date date-str))))
+            (user-error "Config change must be after the current config's start"))
           (setq new-current (plist-put new-current :from date-str))
-          ;; Set :until on old config (which becomes the second entry)
+          ;; The old config keeps its :from so a reset date is preserved.
           (setq new-old (plist-put new-old :until date-str))
-          ;; Remove any :from from the old config (it should be unbounded or chained)
-          (setq new-old (plist-put new-old :from nil))
           ;; Build new versioned config list
           (let ((new-configs (cons new-current (cons new-old (cdr configs)))))
             (org-entry-put nil (org-window-habit-property "CONFIG")
