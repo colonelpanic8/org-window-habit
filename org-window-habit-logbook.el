@@ -64,6 +64,27 @@ STATE-REGEXP optionally specifies the pattern for matching state names."
    (group (regexp org-ts-regexp-inactive))))
 
 
+(defun org-window-habit-get-closing-note-re ()
+  "Return a regexp matching closing note log entries, or nil.
+The regexp is built from the `done' heading in `org-log-note-headings'
+and captures the timestamp in group 3, like
+`org-window-habit-get-logbook-entry-re'."
+  (let ((heading (cdr (assq 'done org-log-note-headings))))
+    (when (and heading (string-match "\\`\\([^%]*\\)%t" heading))
+      (concat "^[ \t]*-[ \t]*" (regexp-quote (match-string 1 heading))
+              "\\(?3:" org-ts-regexp-inactive "\\)"))))
+
+(defun org-window-habit--completion-entry-re ()
+  "Return a regexp matching state change and closing note entries.
+Group 1 is the new state for state changes and unset for closing notes;
+group 3 is the timestamp."
+  (let ((state-re (org-window-habit-get-logbook-entry-re))
+        (closing-re (org-window-habit-get-closing-note-re)))
+    (if closing-re
+        (concat "\\(?:" state-re "\\)\\|\\(?:" closing-re "\\)")
+      state-re)))
+
+
 ;;; State history parsing
 
 (defun org-window-habit--parse-state-history-in-region (start end)
@@ -88,6 +109,23 @@ Entries are read anywhere within the entry, including inline logs and
 LOGBOOK drawers.  Each entry is (to-state from-state time)."
   (cl-destructuring-bind (start end) (org-window-habit-entry-bounds)
     (org-window-habit--parse-state-history-in-region start end)))
+
+
+(defun org-window-habit-parse-completion-times ()
+  "Return the completion times logged in the current entry, in buffer order.
+Completions are state changes into a keyword in `org-done-keywords' and
+closing notes."
+  (cl-destructuring-bind (start end) (org-window-habit-entry-bounds)
+    (save-excursion
+      (goto-char start)
+      (let ((re (org-window-habit--completion-entry-re))
+            times)
+        (while (re-search-forward re end t)
+          (when (or (null (match-beginning 1))
+                    (member (match-string-no-properties 1) org-done-keywords))
+            (push (org-time-string-to-time (match-string-no-properties 3))
+                  times)))
+        (nreverse times)))))
 
 
 ;;; Logbook ordering
@@ -133,7 +171,7 @@ This is efficient because:
 Returns a list of plists with :start, :end, :time, and :text properties."
   (save-excursion
     (goto-char start)
-    (let ((re (org-window-habit-get-logbook-entry-re))
+    (let ((re (org-window-habit--completion-entry-re))
           entries)
       (while (and (< (point) end)
                   (re-search-forward re end t))

@@ -374,5 +374,22 @@ preceding habit."
         (should (time-equal-p (aref (oref habit done-times) 3)
                               (owh-test-make-time 2024 1 15 10 0 0)))))))
 
+(ert-deftest owh-test-parse-completion-times-includes-closing-notes ()
+  "Closing notes count as completions; non-done state changes do not."
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Test habit\n"
+            ":LOGBOOK:\n"
+            "- CLOSING NOTE [2024-01-15 Mon 10:00] \\\\\n"
+            "  note text\n"
+            "- State \"TODO\"       from \"WAIT\"       [2024-01-12 Fri 10:00]\n"
+            "- State \"DONE\"       from \"TODO\"       [2024-01-10 Wed 10:00]\n"
+            ":END:\n")
+    (goto-char (point-min))
+    (let ((times (org-window-habit-parse-completion-times)))
+      (should (= (length times) 2))
+      (should (time-equal-p (nth 0 times) (owh-test-make-time 2024 1 15 10 0 0)))
+      (should (time-equal-p (nth 1 times) (owh-test-make-time 2024 1 10 10 0 0))))))
+
 (provide 'org-window-habit-logbook-test)
 ;;; org-window-habit-logbook-test.el ends here

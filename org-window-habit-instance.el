@@ -48,11 +48,8 @@ compatibility.  TIME defaults to the current time.  Return nil when the
 entry's config is inactive at TIME."
   (save-excursion
     (let* ((done-times
-            (sort
-             (cl-loop for state-change-info in (org-window-habit-parse-logbook)
-                      if (member (nth 0 state-change-info) org-done-keywords)
-                      collect (nth 2 state-change-info))
-             (lambda (a b) (time-less-p b a))))
+            (sort (org-window-habit-parse-completion-times)
+                  (lambda (a b) (time-less-p b a))))
            (done-times-vector (vconcat done-times))
            (config-str (org-entry-get nil (org-window-habit-property "CONFIG") t)))
       (if config-str

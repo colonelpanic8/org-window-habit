@@ -100,5 +100,12 @@ Answer any note prompt and return the entry text afterwards."
     (should (string-match-p "felt good" entry))
     (should (owh-test--deadline-in-days-p entry 7))))
 
+(ert-deftest owh-test-completion-reschedules-with-closing-note ()
+  "Completing with closing-note logging records and counts the completion."
+  (dolist (log-repeat '(time note))
+    (let ((entry (owh-test--complete-weekly-habit 'note log-repeat)))
+      (should (string-match-p "CLOSING NOTE" entry))
+      (should (owh-test--deadline-in-days-p entry 7)))))
+
 (provide 'org-window-habit-advice-test)
 ;;; org-window-habit-advice-test.el ends here
