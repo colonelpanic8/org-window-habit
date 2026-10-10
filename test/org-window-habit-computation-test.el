@@ -904,5 +904,17 @@ When using min aggregation, extra credit on one spec won't help if another is lo
              (org-window-habit-get-next-required-interval habit now)
              (owh-test-make-time 2025 3 12 0 0 0)))))
 
+(ert-deftest owh-test-next-required-with-fine-reschedule-steps ()
+  "Minute reschedule checks over a long window still find the reminder."
+  (let* ((now (owh-test-make-time 2025 3 2 12 0 0))
+         (habit (org-window-habit-create-instance-from-config
+                 (concat "(:window-specs ((:duration (:days 14) :repetitions 1))"
+                         " :reschedule-assessment-interval (:minutes 1))")
+                 (vector (owh-test-make-time 2025 3 1 10 0 0))
+                 now)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-get-next-required-interval habit now)
+             (owh-test-make-time 2025 3 15 0 0 0)))))
+
 (provide 'org-window-habit-computation-test)
 ;;; org-window-habit-computation-test.el ends here

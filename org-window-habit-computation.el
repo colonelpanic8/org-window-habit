@@ -411,10 +411,32 @@ required."
                                 ;; version; continue with the next one.
                                 (plist-get (oref candidate-habit active-config)
                                            :until)
-                              (org-window-habit-keyed-duration-add-plist
-                               candidate-time
-                               reschedule-assessment-interval)))))))))
+                              (org-window-habit--next-reschedule-candidate
+                               candidate-habit iterators candidate-time)))))))))
+          (when (and (null result) candidate-time)
+            (display-warning
+             'org-window-habit
+             (format "Gave up looking for the next required time after %d steps"
+                     steps)))
           result)))))
+
+(defun org-window-habit--next-reschedule-candidate (habit iterators time)
+  "Return the candidate after TIME when searching for HABIT's next requirement.
+ITERATORS are HABIT's iterators at TIME.  Ratios are constant within an
+assessment interval, so when the reschedule step is finer than that,
+skip to the start of the next interval.  Never step past the end of
+HABIT's config version."
+  (with-slots (window-specs reschedule-assessment-interval active-config) habit
+    (let ((next (org-window-habit-keyed-duration-add-plist
+                 time reschedule-assessment-interval))
+          (interval-end (oref (oref (car iterators) window) assessment-end-time))
+          (version-end (plist-get active-config :until)))
+      (when (and (time-less-p next interval-end)
+                 (cl-notany (lambda (spec) (oref spec find-window)) window-specs))
+        (setq next interval-end))
+      (if (and version-end (time-less-p version-end next))
+          version-end
+        next))))
 
 (cl-defmethod org-window-habit-get-future-required-intervals
   ((habit org-window-habit) count &optional now)
