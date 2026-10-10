@@ -233,15 +233,21 @@ Use (:weeks 1) or (:weeks 1 :start :monday) for true week alignment."
                        (owh-test-make-time 2025 expected 1 0 0 0)))))
 
 (ert-deftest owh-test-normalize-time-to-days-7-not-week-aligned ()
-  "Test that (:days 7) normalizes to day-of-month, NOT week boundaries.
-This documents current behavior: '(:days 7)' aligns based on day-of-month
-arithmetic, not day-of-week. Use (:weeks 1) for true week alignment.
-Jan 15, 2024 is a Monday. With (:days 7), we get Jan 9 (Tuesday), not Jan 15 (Monday)."
-  (let* ((input (owh-test-make-time 2024 1 15 14 30 45))  ; Monday
+  "Test that (:days 7) normalizes to midnight, NOT a week boundary.
+Use (:weeks 1) for week alignment."
+  (let* ((input (owh-test-make-time 2024 1 17 14 30 45))  ; Wednesday
          (result (org-window-habit-normalize-time-to-duration input '(:days 7))))
-    ;; Current behavior: aligned-day = 15 - (7-1) = 15 - 6 = 9
-    ;; Jan 9, 2024 is a Tuesday, not a Monday
-    (should (owh-test-times-equal-p result (owh-test-make-time 2024 1 9 0 0 0)))))
+    (should (owh-test-times-equal-p result (owh-test-make-time 2024 1 17 0 0 0)))))
+
+(ert-deftest owh-test-normalize-time-uses-smallest-unit ()
+  "Test that alignment follows the smallest unit regardless of key order."
+  (let ((input (owh-test-make-time 2024 5 17 14 30 45)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration input '(:hours 6 :days 1))
+             (owh-test-make-time 2024 5 17 12 0 0)))
+    (should (owh-test-times-equal-p
+             (org-window-habit-normalize-time-to-duration input '(:years 2))
+             (owh-test-make-time 2024 1 1 0 0 0)))))
 
 (ert-deftest owh-test-normalize-time-weeks-monday-default ()
   "Test that (:weeks 1) aligns to Monday by default.

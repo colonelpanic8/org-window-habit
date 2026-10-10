@@ -370,10 +370,10 @@ The completion at reset time should be included (>= not >)."
                   (owh-test-make-time 2024 1 18 0 0 0))))
       (should (= count 2)))))  ; Jan 15 and Jan 17
 
-(ert-deftest owh-test-anchoring-derived-from-reset-vs-explicit ()
-  "Test that habit with reset-time derives anchor differently than explicit start.
-When start-time is not provided, it's derived from reset-time (normalized).
-This might give a different anchor than explicitly setting start-time."
+(ert-deftest owh-test-anchoring-derived-from-reset-matches-explicit ()
+  "Test that a start derived from reset-time is the reset day's midnight.
+Multi-day assessment periods then begin on the reset day, the same as
+with an explicit start-time."
   (let* ((reset-time (owh-test-make-time 2024 1 15 10 30 0))
          ;; Habit A: explicit start-time
          (habit-a (make-instance 'org-window-habit
@@ -395,12 +395,9 @@ This might give a different anchor than explicitly setting start-time."
     (should (owh-test-times-equal-p
              (oref habit-a start-time)
              (owh-test-make-time 2024 1 15 0 0 0)))
-    ;; Habit B's start is derived from reset-time via normalization
-    ;; The normalization for (:days 3) uses day-of-month: 15 - (3-1) = 13
-    ;; So start-time should be Jan 13 00:00
     (should (owh-test-times-equal-p
              (oref habit-b start-time)
-             (owh-test-make-time 2024 1 13 0 0 0)))))
+             (owh-test-make-time 2024 1 15 0 0 0)))))
 
 (ert-deftest owh-test-reset-time-interleaved-completions ()
   "Test with completions interleaved around reset time.

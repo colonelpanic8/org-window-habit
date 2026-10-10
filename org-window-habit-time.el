@@ -251,9 +251,15 @@ If both are nil, return nil (meaning all days allowed)."
 (defun org-window-habit-normalize-time-to-duration
     (time-value duration-plist)
   "Normalize TIME-VALUE to the start of a period defined by DURATION-PLIST.
-For :days, aligns to midnight. For :hours, aligns to the hour boundary.
-For :weeks with :start, aligns to the specified day of week.
-For :months, aligns to the 1st of the month."
+The smallest unit in DURATION-PLIST determines the alignment:
+- :seconds, :minutes, :hours with value N align to the most recent
+  multiple of N within the enclosing minute, hour, or day.
+- :days aligns to midnight.
+- :weeks aligns to midnight of the most recent :start day (default
+  :monday), regardless of the number of weeks.
+- :months with value N aligns to the 1st of the month, with periods of
+  N months counted from January.
+- :years aligns to January 1st."
   (let* ((alignment-decoded (decode-time time-value))
          (year (nth 5 alignment-decoded))
          (month (nth 4 alignment-decoded))
@@ -262,52 +268,39 @@ For :months, aligns to the 1st of the month."
          (minute (nth 1 alignment-decoded))
          (second (nth 0 alignment-decoded))
          (day-of-week (nth 6 alignment-decoded))
-         ;; Check for :weeks with optional :start
-         (weeks-value (plist-get duration-plist :weeks))
          (week-start-day (or (plist-get duration-plist :start) :monday))
-         ;; For non-week durations, find smallest duration type
-         (smallest-duration-type (if weeks-value :weeks (car (last duration-plist 2))))
-         (smallest-duration-value (if weeks-value weeks-value (cadr (last duration-plist 2)))))
-
-    ;; Align time based on the smallest duration type and its value
-    (cond
-     ((eq smallest-duration-type :seconds)
-      (encode-time
-       (* smallest-duration-value (floor second smallest-duration-value)) minute
-       hour day month year))
-
-     ((eq smallest-duration-type :minutes)
-      (encode-time
-       0 (* smallest-duration-value
-            (floor minute smallest-duration-value)) hour day month year))
-
-     ((eq smallest-duration-type :hours)
-      (encode-time
-       0 0 (* smallest-duration-value (floor hour smallest-duration-value))
-       day month year))
-
-     ((eq smallest-duration-type :days)
-      (let* ((aligned-day (- day (1- smallest-duration-value))))
-        (encode-time 0 0 0 aligned-day month year)))
-
-     ((eq smallest-duration-type :weeks)
-      (let* ((target-dow (org-window-habit-day-of-week-number week-start-day))
-             ;; Calculate days to subtract to reach the target day-of-week
-             (days-since-target (mod (- day-of-week target-dow) 7))
-             (aligned-day (- day days-since-target)))
-        (encode-time 0 0 0 aligned-day month year)))
-
-     ((eq smallest-duration-type :months)
-      (encode-time 0 0 0 1
-                   (1+ (* smallest-duration-value
-                          (floor (1- month) smallest-duration-value)))
-                   year))
-
-     ((eq smallest-duration-type :years)
-      (let* ((aligned-year (- year (1- smallest-duration-value))))
-        (encode-time 0 0 0 1 1 aligned-year)))
-
-     (t time-value))))
+         (smallest-duration-type
+          (cl-find-if (lambda (key) (numberp (plist-get duration-plist key)))
+                      '(:seconds :minutes :hours :days :weeks :months :years)))
+         (smallest-duration-value
+          (plist-get duration-plist smallest-duration-type)))
+    (pcase smallest-duration-type
+      (:seconds
+       (encode-time
+        (* smallest-duration-value (floor second smallest-duration-value))
+        minute hour day month year))
+      (:minutes
+       (encode-time
+        0 (* smallest-duration-value (floor minute smallest-duration-value))
+        hour day month year))
+      (:hours
+       (encode-time
+        0 0 (* smallest-duration-value (floor hour smallest-duration-value))
+        day month year))
+      (:days
+       (encode-time 0 0 0 day month year))
+      (:weeks
+       (let* ((target-dow (org-window-habit-day-of-week-number week-start-day))
+              (days-since-target (mod (- day-of-week target-dow) 7)))
+         (encode-time 0 0 0 (- day days-since-target) month year)))
+      (:months
+       (encode-time 0 0 0 1
+                    (1+ (* smallest-duration-value
+                           (floor (1- month) smallest-duration-value)))
+                    year))
+      (:years
+       (encode-time 0 0 0 1 1 year))
+      (_ time-value))))
 
 (defun org-window-habit-find-aligned-bounding-time (time-value duration-plist aligned-time)
   "Find the bounding ALIGNED-TIME for TIME-VALUE using DURATION-PLIST.
