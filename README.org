@@ -78,8 +78,7 @@ Or install from git using =straight.el=:
   :straight
   (org-window-habit
    :repo "colonelpanic8/org-window-habit"
-   :host github
-   :files ("org-window-habit.el"))
+   :host github)
   :config
   (org-window-habit-mode +1))
 #+end_src
