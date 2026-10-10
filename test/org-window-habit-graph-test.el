@@ -44,16 +44,11 @@
 ;;; Face Creation Tests
 
 (ert-deftest owh-test-create-face ()
-  "Test that face creation returns a face symbol."
-  (let ((face (org-window-habit-create-face "#ff0000" "#00ff00")))
-    (should (symbolp face))
-    (should (facep face))))
-
-(ert-deftest owh-test-create-face-caching ()
-  "Test that same colors return same face."
-  (let ((face1 (org-window-habit-create-face "#123456" "#654321"))
-        (face2 (org-window-habit-create-face "#123456" "#654321")))
-    (should (eq face1 face2))))
+  "Test that faces are anonymous and do not define new named faces."
+  (let ((faces-before (length (face-list))))
+    (should (equal (org-window-habit-create-face "#ff0000" "#00ff00")
+                   '(:background "#ff0000" :foreground "#00ff00")))
+    (should (= (length (face-list)) faces-before))))
 
 ;;; Graph Building Tests
 

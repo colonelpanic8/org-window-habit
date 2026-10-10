@@ -44,20 +44,11 @@
 (defvar org-window-habit-streak-threshold)
 
 
-;;; Face creation
+;;; Faces
 
 (defun org-window-habit-create-face (bg-color foreground-color)
-  "Create or return a face with BG-COLOR background and FOREGROUND-COLOR.
-Face names are cached based on color values to avoid recreating faces."
-  (let* ((bg-name (replace-regexp-in-string "#" "" bg-color))
-         (fg-name (replace-regexp-in-string "#" "" foreground-color))
-         (face-name (intern (format "org-window-habit-face-bg-%s-fg-%s" bg-name fg-name))))
-    (if (facep face-name)
-        face-name
-      (progn
-        (make-face face-name)
-        (set-face-attribute face-name nil :background bg-color :foreground foreground-color)
-        face-name))))
+  "Return an anonymous face with BG-COLOR background and FOREGROUND-COLOR."
+  (list :background bg-color :foreground foreground-color))
 
 
 ;;; Color utilities
