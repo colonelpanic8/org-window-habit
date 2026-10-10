@@ -32,6 +32,7 @@
 
 ;; Forward declarations
 (declare-function org-window-habit-property "org-window-habit")
+(declare-function org-window-habit-entry-get "org-window-habit")
 
 ;; Forward declarations for classes
 (defvar org-window-habit)
@@ -51,7 +52,7 @@ entry's config is inactive at TIME."
             (sort (org-window-habit-parse-completion-times)
                   (lambda (a b) (time-less-p b a))))
            (done-times-vector (vconcat done-times))
-           (config-str (org-entry-get nil (org-window-habit-property "CONFIG") t)))
+           (config-str (org-window-habit-entry-get "CONFIG")))
       (if config-str
           ;; New CONFIG property format
           (org-window-habit-create-instance-from-config

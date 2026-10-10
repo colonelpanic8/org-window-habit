@@ -622,6 +622,21 @@ This tests backwards compatibility - both old formats work."
       (goto-char (point-min))
       (should (org-window-habit-entry-p)))))
 
+(ert-deftest owh-test-entry-p-respects-property-inheritance-setting ()
+  "Child tasks inherit habit properties only when Org is set to inherit them."
+  (let ((org-window-habit-property-prefix nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Habit\n:PROPERTIES:\n"
+              ":CONFIG: (:window-specs ((:duration (:days 7) :repetitions 1)))\n"
+              ":END:\n** TODO Subtask\n")
+      (goto-char (point-max))
+      (forward-line -1)
+      (let ((org-use-property-inheritance nil))
+        (should-not (org-window-habit-entry-p)))
+      (let ((org-use-property-inheritance '("CONFIG")))
+        (should (org-window-habit-entry-p))))))
+
 ;;; EIEIO Class Tests
 
 (ert-deftest owh-test-window-spec-creation ()

@@ -158,17 +158,25 @@ returns \"OWH_WINDOW_DURATION\"."
       (format "%s_%s" org-window-habit-property-prefix name)
     name))
 
+(defun org-window-habit-entry-get (name)
+  "Return the value of habit property NAME for the entry at point.
+NAME is given without `org-window-habit-property-prefix'.  Values are
+inherited from parent entries only as `org-use-property-inheritance'
+allows."
+  (org-entry-get nil (org-window-habit-property name) 'selective))
+
 (defun org-window-habit-entry-p ()
   "Return non-nil if entry at point is an `org-window-habit'.
 An entry is considered a window habit if it has either:
 - The CONFIG property (unified versioned format), or
 - The WINDOW_SPECS property (new format), or
 - The WINDOW_DURATION property (simple format)
-Property names respect `org-window-habit-property-prefix'."
+Property names respect `org-window-habit-property-prefix'.  Properties
+are read with `org-window-habit-entry-get'."
   (and (org-entry-get nil "TODO")
-       (or (org-entry-get nil (org-window-habit-property "CONFIG") t)
-           (org-entry-get nil (org-window-habit-property "WINDOW_SPECS") t)
-           (org-entry-get nil (org-window-habit-property "WINDOW_DURATION") t))))
+       (or (org-window-habit-entry-get "CONFIG")
+           (org-window-habit-entry-get "WINDOW_SPECS")
+           (org-window-habit-entry-get "WINDOW_DURATION"))))
 
 
 ;;; Load submodules

@@ -30,6 +30,7 @@
 
 ;; Forward declaration for org-window-habit-property
 (declare-function org-window-habit-property "org-window-habit")
+(declare-function org-window-habit-entry-get "org-window-habit")
 
 
 ;;; Date parsing
@@ -298,7 +299,7 @@ If RESET_TIME exists, it's converted to :from on the config."
     (org-map-entries
      (lambda ()
        (when (and (org-window-habit-entry-p)
-                  (not (org-entry-get nil (org-window-habit-property "CONFIG") t)))
+                  (not (org-window-habit-entry-get "CONFIG")))
          (org-window-habit-migrate-to-config)
          (cl-incf count))))
     (message "Migrated %d habits" count)))
@@ -318,7 +319,7 @@ This converts a single config to versioned format if needed."
   "Insert a config change at DATE (a time value).
 Creates a versioned config where the current config continues from DATE,
 and the old config is preserved with :until DATE."
-  (let* ((config-str (org-entry-get nil (org-window-habit-property "CONFIG") t))
+  (let* ((config-str (org-window-habit-entry-get "CONFIG"))
          (date-str (format-time-string "%Y-%m-%d" date)))
     (if config-str
         ;; Have existing CONFIG property
